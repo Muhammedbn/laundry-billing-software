@@ -4,7 +4,7 @@ import {
   Search, Plus, Minus, ShoppingBag, Trash2, CheckCircle, 
   X, ChevronDown, Shirt, Bed, Wind, Layers, 
   Droplet, Zap, Heart, Sparkles, User, CreditCard, Wallet, 
-  Gift, Printer, Receipt, Edit3, UserPlus, Phone, Mail, MapPin, MessageCircle
+  Gift, Printer, Receipt, Edit3, UserPlus, Phone, Mail, MapPin, MessageCircle, Landmark
 } from 'lucide-react';
 import axios from 'axios';
 import { useSettings } from '../context/SettingsContext';
@@ -59,9 +59,17 @@ export default function POS() {
   };
 
   // Checkout states
-  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentMethod, setPaymentMethod] = useState(settings.defaultPaymentMethod?.toLowerCase() || 'cash');
+  const [selectedBank, setSelectedBank] = useState('');
   const [tenderedAmount, setTenderedAmount] = useState('');
-  const [printReceipt, setPrintReceipt] = useState(true);
+  const [printReceipt, setPrintReceipt] = useState(settings.autoPrint !== undefined ? settings.autoPrint : true);
+
+  useEffect(() => {
+    if (settings.bankAccounts && settings.bankAccounts.length > 0 && !selectedBank) {
+      const defaultBank = settings.bankAccounts.find(acc => acc.id === settings.defaultBankId) || settings.bankAccounts[0];
+      setSelectedBank(defaultBank.bankName);
+    }
+  }, [settings.bankAccounts, settings.defaultBankId]);
 
   // Customer states
   const [customerSearch, setCustomerSearch] = useState('');
@@ -111,7 +119,7 @@ export default function POS() {
       try {
         await window.electronAPI.dbQuery(
           'INSERT INTO customers (id, shopId, name, phone, email, address, creditLimit, isSynced, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [id, 'SHOP_01', customerFormData.name, customerFormData.phone, customerFormData.email, customerFormData.address, customerFormData.creditLimit || 0, 0, timestamp]
+          [id, 'SHOP_01', customerFormData.name, customerFormData.phone, customerFormData.email, customerFormData.address, customerFormData.creditLimit || settings.defaultCreditLimit || 500, 0, timestamp]
         );
         handleSelectCustomer({ id, ...customerFormData });
         setShowCustomerModal(false);
@@ -312,11 +320,12 @@ export default function POS() {
         const accountType = paymentMethod === 'card' || paymentMethod === 'upi' ? 'BANK' : 'CASH';
         
         if (paymentMethod !== 'credit') {
+          const desc = `Order ${orderId}${accountType === 'BANK' ? ` via ${selectedBank}` : ''}`;
           await window.electronAPI.dbQuery(
             `INSERT INTO account_transactions 
-             (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [txnId, 'SHOP_01', accountType, 'INCOME', 'Sales', total, `Order ${orderId}`, txnTimestamp, 0, new Date().toISOString(), 'ShoppingBag']
+             (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon, bankAccountId) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [txnId, 'SHOP_01', accountType, 'INCOME', 'Sales', total, desc, txnTimestamp, 0, new Date().toISOString(), 'ShoppingBag', accountType === 'BANK' ? selectedBank : null]
           );
         }
 
@@ -361,7 +370,7 @@ export default function POS() {
             total,
             paidAmount,
             dueAmount,
-            paymentStatus,
+            isCredit ? 'Credit' : 'Pending',
             JSON.stringify(cart),
             new Date().toISOString(),
             0,
@@ -397,11 +406,11 @@ export default function POS() {
             customerPhone: selectedCustomer ? selectedCustomer.phone : '',
             shopId: 'SHOP_01',
             branchId: 'BRANCH_01',
-            status: isCredit ? 'Credit' : 'Payment Pending',
+            status: 'Payment Pending',
             totalAmount: total,
             paidAmount: paidAmount,
             dueAmount: dueAmount,
-            paymentStatus: paymentStatus,
+            paymentStatus: isCredit ? 'Credit' : 'Pending',
             paymentMethod: paymentMethod.toUpperCase(),
             items: cart,
             statusHistory: [{ status: isCredit ? 'Credit' : 'Payment Pending', updatedBy: 'POS System', timestamp: new Date().toISOString() }]
@@ -518,6 +527,25 @@ export default function POS() {
               <MethodCard id="credit" label="Store Credit" icon={<User />} active={paymentMethod === 'credit'} onClick={setPaymentMethod} />
             </div>
           </div>
+
+          {(paymentMethod === 'card' || paymentMethod === 'wallet') && settings.bankAccounts?.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <h3 className={styles.modalSectionTitle}>Select Bank Account</h3>
+              <div className={styles.inputWrapper} style={{ background: 'white', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0.25rem 0.5rem' }}>
+                <Landmark size={18} color="#2563EB" />
+                <select 
+                  className={styles.inputField} 
+                  style={{ border: 'none', width: '100%', outline: 'none' }}
+                  value={selectedBank}
+                  onChange={(e) => setSelectedBank(e.target.value)}
+                >
+                  {settings.bankAccounts.map((acc, idx) => (
+                    <option key={idx} value={acc.bankName}>{acc.bankName}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           <div className={styles.checkoutBottom}>
             <div>
@@ -654,9 +682,10 @@ export default function POS() {
                         onClick={() => handleWhatsApp(selectedCustomer.phone)} 
                       />
                     </div>
-                    {selectedCustomer.balance > 0 && (
-                      <span className={styles.overdueBadge}>
-                        Overdue: <CurrencySymbol size={10} /> {selectedCustomer.balance.toFixed(2)}
+                    {selectedCustomer.balance !== 0 && (
+                      <span className={selectedCustomer.balance > 0 ? styles.overdueBadge : styles.advanceBadge}>
+                        {selectedCustomer.balance > 0 ? 'Overdue: ' : 'Advance: '} 
+                        <CurrencySymbol size={10} /> {Math.abs(selectedCustomer.balance).toFixed(2)}
                       </span>
                     )}
                   </div>
@@ -728,7 +757,10 @@ export default function POS() {
             <button className={styles.secondaryBtn} onClick={handleDiscount}><Receipt size={18} /> Discount</button>
             <button className={styles.secondaryBtn} onClick={handleQuote}><Receipt size={18} /> Quote</button>
             {selectedCustomer && selectedCustomer.balance > 0 && (
-              <button className={styles.overdueBtn} onClick={() => alert('Generating Overdue Statement...')}>
+              <button 
+                className={styles.overdueBtn} 
+                onClick={() => navigate(`/overdue-statement/${selectedCustomer.id}`)}
+              >
                 <Printer size={18} /> Overdue Receipt
               </button>
             )}
@@ -878,7 +910,7 @@ export default function POS() {
                     </div>
                   </div>
                   <div className={styles.formGroup}>
-                    <label>Credit Limit (د.إ)</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800 }}>CREDIT LIMIT (OPTIONAL)</label>
                     <div className={styles.posInputWrapper}>
                       <CreditCard size={18} />
                       <input 

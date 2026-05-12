@@ -1,5 +1,5 @@
-import React from 'react';
-import { QrCode, Activity } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { Activity } from 'lucide-react';
 import CurrencySymbol from './CurrencySymbol';
 import styles from '../pages/Invoice.module.css';
 
@@ -64,7 +64,7 @@ export default function InvoiceTemplate({ order, settings }) {
       <div className={styles.bottomSection}>
         <div className={styles.trackBox}>
           <div className={styles.qrCode}>
-            <QrCode size={64} color="#0F172A" />
+            <QRCodeSVG value={`ORDER:${order.id}`} size={80} />
           </div>
           <div className={styles.trackInfo}>
             <h4>Track Progress</h4>

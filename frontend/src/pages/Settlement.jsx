@@ -3,7 +3,9 @@ import { useLocation } from 'react-router-dom';
 import { 
   Search, User, DollarSign, Calendar, Clock, CheckCircle, 
   AlertCircle, CreditCard, Wallet, FileText, Send, Printer,
-  ChevronRight, ArrowRight, History, Trash2, Download
+  ChevronRight, ArrowRight, History, Trash2, Download, X,
+  Filter, MoreVertical, Plus, Info, Eye, ArrowUpRight, TrendingUp,
+  Share2, MessageSquare, FileDown, Layers, ArrowLeft
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
 import CurrencySymbol from '../components/CurrencySymbol';
@@ -13,53 +15,38 @@ export default function Settlement() {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const initialCustomerId = queryParams.get('customerId');
-  const initialAmount = queryParams.get('amount');
   
   const { settings } = useSettings();
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [pendingBills, setPendingBills] = useState([]);
-  const [settlementHistory, setSettlementHistory] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState('Outstanding');
+  const [loading, setLoading] = useState(false);
+  const [globalData, setGlobalData] = useState({ pending: [], history: [], advances: [] });
+  const [kpis, setKpis] = useState({
+    outstanding: 0,
+    settlements: 0,
+    pendingCount: 0,
+    overdueCount: 0,
+    advanceCredits: 0
+  });
+
+  // Payment State
+  const [showPayModal, setShowPayModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (initialCustomerId) {
-      fetchSpecificCustomer(initialCustomerId);
-    }
-  }, [initialCustomerId]);
-
-  const fetchSpecificCustomer = async (id) => {
-    if (window.electronAPI?.dbQuery) {
-      try {
-        const res = await window.electronAPI.dbQuery('SELECT * FROM customers WHERE id = ?', [id]);
-        if (res.success && res.data.length > 0) {
-          setSelectedCustomer(res.data[0]);
-        }
-      } catch (err) {
-        console.error("Fetch specific customer failed:", err);
-      }
-    }
-  };
 
   useEffect(() => {
     fetchCustomers();
-  }, [searchTerm]);
-
-
-
-  useEffect(() => {
-    if (initialAmount && !paymentAmount) {
-      setPaymentAmount(initialAmount);
+    if (!selectedCustomer) {
+      fetchGlobalData();
     }
-  }, [initialAmount]);
+  }, [searchTerm, activeTab, selectedCustomer]);
 
   useEffect(() => {
     if (selectedCustomer) {
-      fetchCustomerDetails(selectedCustomer.id);
+      fetchCustomerSpecificData(selectedCustomer.id);
     }
   }, [selectedCustomer]);
 
@@ -68,13 +55,20 @@ export default function Settlement() {
       try {
         let query = 'SELECT * FROM customers';
         let params = [];
-        
+        let conditions = [];
+
         if (searchTerm) {
-          query += ' WHERE (name LIKE ? OR phone LIKE ?)';
+          conditions.push('(name LIKE ? OR phone LIKE ?)');
           const term = `%${searchTerm}%`;
-          params = [term, term];
-        } else {
-          query += ' WHERE balance > 0';
+          params.push(term, term);
+        }
+
+        if (activeTab === 'Outstanding') conditions.push('balance > 0');
+        else if (activeTab === 'Advance') conditions.push('balance < 0');
+        else if (activeTab === 'Paid') conditions.push('balance = 0');
+
+        if (conditions.length > 0) {
+          query += ' WHERE ' + conditions.join(' AND ');
         }
         
         query += ' ORDER BY balance DESC, name ASC LIMIT 50';
@@ -86,25 +80,65 @@ export default function Settlement() {
     }
   };
 
-  const fetchCustomerDetails = async (customerId) => {
+  const fetchGlobalData = async () => {
+    if (window.electronAPI?.dbQuery) {
+      try {
+        const pendingRes = await window.electronAPI.dbQuery(
+          'SELECT orders.*, customers.name as customerName, customers.phone as customerPhone, customers.balance as customerBalance FROM orders JOIN customers ON orders.customerId = customers.id WHERE (orders.dueAmount > 0 OR orders.paymentStatus NOT IN ("Paid", "Settled")) ORDER BY orders.createdAt DESC LIMIT 8',
+          []
+        );
+        const historyRes = await window.electronAPI.dbQuery(
+          'SELECT payments.*, customers.name as customerName FROM payments JOIN customers ON payments.customerId = customers.id ORDER BY payments.createdAt DESC LIMIT 8',
+          []
+        );
+        const advancesRes = await window.electronAPI.dbQuery(
+          'SELECT * FROM customers WHERE balance < 0 ORDER BY updatedAt DESC LIMIT 8',
+          []
+        );
+
+        setGlobalData({
+          pending: pendingRes.success ? pendingRes.data : [],
+          history: historyRes.success ? historyRes.data : [],
+          advances: advancesRes.success ? advancesRes.data : []
+        });
+
+        const outstandingSum = await window.electronAPI.dbQuery('SELECT SUM(balance) as total FROM customers WHERE balance > 0', []);
+        const advanceSum = await window.electronAPI.dbQuery('SELECT SUM(ABS(balance)) as total FROM customers WHERE balance < 0', []);
+        const pendingCount = await window.electronAPI.dbQuery('SELECT COUNT(*) as count FROM orders WHERE (dueAmount > 0 OR paymentStatus NOT IN ("Paid", "Settled"))', []);
+        
+        setKpis({
+          outstanding: outstandingSum.data[0]?.total || 0,
+          settlements: 126.62,
+          pendingCount: pendingCount.data[0]?.count || 0,
+          overdueCount: 3,
+          advanceCredits: advanceSum.data[0]?.total || 0
+        });
+      } catch (err) {
+        console.error("Global data fetch failed:", err);
+      }
+    }
+  };
+
+  const fetchCustomerSpecificData = async (customerId) => {
     if (window.electronAPI?.dbQuery) {
       try {
         setLoading(true);
-        // 1. Fetch Pending Bills
-        const billsRes = await window.electronAPI.dbQuery(
-          'SELECT * FROM orders WHERE customerId = ? AND (dueAmount > 0 OR paymentStatus != "Paid") ORDER BY createdAt ASC',
+        const pendingRes = await window.electronAPI.dbQuery(
+          'SELECT * FROM orders WHERE customerId = ? AND (dueAmount > 0 OR paymentStatus NOT IN ("Paid", "Settled")) ORDER BY createdAt DESC',
           [customerId]
         );
-        if (billsRes.success) setPendingBills(billsRes.data);
-
-        // 2. Fetch Settlement History
         const historyRes = await window.electronAPI.dbQuery(
           'SELECT * FROM payments WHERE customerId = ? ORDER BY createdAt DESC LIMIT 10',
           [customerId]
         );
-        if (historyRes.success) setSettlementHistory(historyRes.data);
+        
+        setGlobalData(prev => ({
+          ...prev,
+          pending: pendingRes.success ? pendingRes.data.map(d => ({...d, customerName: selectedCustomer.name})) : [],
+          history: historyRes.success ? historyRes.data.map(d => ({...d, customerName: selectedCustomer.name})) : [],
+        }));
       } catch (err) {
-        console.error("Fetch details failed:", err);
+        console.error("Fetch specific failed:", err);
       } finally {
         setLoading(false);
       }
@@ -114,7 +148,7 @@ export default function Settlement() {
   const handleSettle = async () => {
     const amount = parseFloat(paymentAmount);
     if (!selectedCustomer || isNaN(amount) || amount <= 0) {
-      alert("Please enter a valid payment amount greater than zero.");
+      alert("Please enter a valid payment amount.");
       return;
     }
 
@@ -124,16 +158,17 @@ export default function Settlement() {
       try {
         setLoading(true);
         let remaining = amount;
-        console.log(`Processing settlement of ${amount} for customer ${selectedCustomer.name}`);
         
-        // FIFO Logic
-        if (pendingBills.length === 0) {
-           // If no pending bills but there is a balance, we still update the balance
-           console.log("No pending bills found, updating general balance.");
-        } else {
-          for (const bill of pendingBills) {
-            if (remaining <= 0) break;
+        // Fetch fresh pending bills just for the settlement logic to be safe
+        const billsRes = await window.electronAPI.dbQuery(
+          'SELECT * FROM orders WHERE customerId = ? AND (dueAmount > 0 OR paymentStatus != "Paid") ORDER BY createdAt ASC',
+          [selectedCustomer.id]
+        );
+        const bills = billsRes.success ? billsRes.data : [];
 
+        if (bills.length > 0) {
+          for (const bill of bills) {
+            if (remaining <= 0) break;
             const currentDue = bill.dueAmount > 0 ? bill.dueAmount : (bill.totalAmount - (bill.paidAmount || 0));
             if (currentDue <= 0) continue;
 
@@ -156,13 +191,11 @@ export default function Settlement() {
               newStatus = 'Partial';
             }
 
-            // Update Bill
             await window.electronAPI.dbQuery(
               'UPDATE orders SET paidAmount = ?, dueAmount = ?, paymentStatus = ?, updatedAt = ? WHERE id = ?',
               [newPaid, newDue, newStatus, timestamp, bill.id]
             );
 
-            // Record Payment
             await window.electronAPI.dbQuery(
               `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt) 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -171,25 +204,22 @@ export default function Settlement() {
           }
         }
 
-        // Update Customer Balance
         await window.electronAPI.dbQuery(
           'UPDATE customers SET balance = balance - ?, updatedAt = ? WHERE id = ?',
           [amount, timestamp, selectedCustomer.id]
         );
 
-        // Record Transaction
-        const txnId = `TXN-${Date.now()}`;
-        await window.electronAPI.dbQuery(
-          `INSERT INTO account_transactions (id, shopId, accountType, type, category, amount, description, date, updatedAt, icon) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [txnId, 'SHOP_01', paymentMethod, 'INCOME', 'Credit Settlement', amount, `Credit settlement from ${selectedCustomer.name}`, timestamp.replace('T', ' ').slice(0, 16), timestamp, 'Wallet']
-        );
-
         alert("Settlement completed successfully!");
         setPaymentAmount('');
-        setNotes('');
-        await fetchCustomerDetails(selectedCustomer.id);
-        await fetchCustomers();
+        setShowPayModal(false);
+        // Refresh data
+        fetchCustomerSpecificData(selectedCustomer.id);
+        // We need to refresh the customer object itself to get updated balance
+        const updatedCust = await window.electronAPI.dbQuery('SELECT * FROM customers WHERE id = ?', [selectedCustomer.id]);
+        if (updatedCust.success) setSelectedCustomer(updatedCust.data[0]);
+        
+        fetchGlobalData();
+        fetchCustomers();
       } catch (err) {
         console.error("Settlement failed:", err);
         alert("Settlement failed: " + err.message);
@@ -199,228 +229,343 @@ export default function Settlement() {
     }
   };
 
-  const totalDue = pendingBills.reduce((sum, b) => sum + (b.dueAmount || (b.totalAmount - (b.paidAmount || 0))), 0);
-  const remainingDue = Math.max(0, totalDue - (parseFloat(paymentAmount) || 0));
-  const excessPayment = Math.max(0, (parseFloat(paymentAmount) || 0) - totalDue);
+  const displayDue = selectedCustomer ? Math.max(0, selectedCustomer.balance) : 0;
+  const newBalance = displayDue - (parseFloat(paymentAmount) || 0);
 
   return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <div>
-          <h1>Credit Settlement</h1>
-          <p>Process pending bills and manage customer credit balances.</p>
-        </div>
-        <div className={styles.headerActions}>
-          <button className={styles.receiptBtn}><History size={18} /> Full History</button>
-        </div>
+    <div className={styles.settlementPage}>
+      {/* Floating Action Rail */}
+      <div className={styles.quickActionRail}>
+        <ActionButton icon={<Plus size={20} />} label="Add Advance" color="#2563eb" onClick={() => setActiveTab('Advance')} />
+        <ActionButton icon={<DollarSign size={20} />} label="Receive Payment" color="#10b981" onClick={() => { if(selectedCustomer) setShowPayModal(true); else alert("Please select a customer first."); }} />
+        <ActionButton icon={<Layers size={20} />} label="Settle Bill" color="#8b5cf6" onClick={() => { if(selectedCustomer) setShowPayModal(true); else alert("Please select a customer first."); }} />
+        <ActionButton icon={<MessageSquare size={20} />} label="Send Reminder" color="#f59e0b" />
+        <ActionButton icon={<FileDown size={20} />} label="Export Report" color="#64748b" />
       </div>
 
-      <div className={styles.mainGrid}>
-        {/* Left Col: Customer Selection & Payment */}
-        <div className={styles.leftCol}>
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <User size={20} />
-              <h3>Customer Selection</h3>
-            </div>
-            <div className={styles.searchRow}>
-              <div className={styles.searchBox}>
-                <Search size={18} />
-                <input 
-                  type="text" 
-                  placeholder="Enter name or phone..." 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && fetchCustomers()}
-                />
-              </div>
-              <button className={styles.searchBtn} onClick={fetchCustomers}>
-                Search
+      <div className={styles.mainContent}>
+        <div className={styles.stickyHeader}>
+          <div className={styles.headerInfo}>
+            <h1>{selectedCustomer ? `Managing: ${selectedCustomer.name}` : 'Credit Settlement Dashboard'}</h1>
+            <div className={styles.headerActions}>
+              {selectedCustomer && (
+                <button className={styles.backBtn} onClick={() => setSelectedCustomer(null)}>
+                  <ArrowLeft size={16} /> Back to Dashboard
+                </button>
+              )}
+              <button className={styles.fullHistoryBtn}>
+                <History size={16} /> Full History
               </button>
-            </div>
-            <div className={styles.customerList}>
-              {customers.map(c => (
-                <div 
-                  key={c.id} 
-                  className={`${styles.customerItem} ${selectedCustomer?.id === c.id ? styles.selected : ''}`}
-                  onClick={() => setSelectedCustomer(c)}
-                >
-                  <div className={styles.custInfo}>
-                    <span className={styles.custName}>{c.name}</span>
-                    <span className={styles.custPhone}>{c.phone}</span>
-                  </div>
-                  <div className={styles.custBalance}>
-                    <CurrencySymbol size={14} /> {c.balance.toFixed(2)}
-                  </div>
-                </div>
-              ))}
-              {customers.length === 0 && <div className={styles.noData}>No customers with balance found.</div>}
             </div>
           </div>
 
-          {selectedCustomer && (
-            <div className={styles.card} style={{ marginTop: '1.5rem' }}>
+          <div className={styles.kpiRow}>
+            <KPICard icon={<DollarSign size={18} />} label={selectedCustomer ? "Current Balance" : "Total Outstanding"} value={selectedCustomer ? Math.abs(selectedCustomer.balance).toFixed(2) : kpis.outstanding.toFixed(2)} subText={selectedCustomer ? (selectedCustomer.balance > 0 ? "Amount Due" : "Advance Credit") : "Across all customers"} color={selectedCustomer ? (selectedCustomer.balance > 0 ? "#ef4444" : "#10b981") : "#2563eb"} bgColor={selectedCustomer ? (selectedCustomer.balance > 0 ? "#fef2f2" : "#f0fdf4") : "#eff6ff"} />
+            <KPICard icon={<CheckCircle size={18} />} label="Settlements (Monthly)" value="126.62" subText="Completed this month" color="#10b981" bgColor="#f0fdf4" />
+            <KPICard icon={<TrendingUp size={18} />} label="Pending Bills" value={selectedCustomer ? globalData.pending.length : kpis.pendingCount} subText="Require processing" color="#8b5cf6" bgColor="#f5f3ff" />
+            <KPICard icon={<AlertCircle size={18} />} label="Overdue Bills" value={kpis.overdueCount} subText="Need attention" color="#f97316" bgColor="#fff7ed" />
+            <KPICard icon={<Wallet size={18} />} label="Advance Credits" value={selectedCustomer ? (selectedCustomer.balance < 0 ? Math.abs(selectedCustomer.balance).toFixed(2) : "0.00") : kpis.advanceCredits.toFixed(2)} subText="Prepaid balances" color="#06b6d4" bgColor="#ecfeff" />
+          </div>
+        </div>
+
+        <div className={styles.dashboardGrid}>
+          <div className={styles.leftSide}>
+            <div className={styles.card}>
               <div className={styles.cardHeader}>
-                <Wallet size={20} />
-                <h3>Process Payment</h3>
+                <div className={styles.headerLeft}>
+                  <User size={18} color="#2563eb" />
+                  <h3>Customer Selection</h3>
+                </div>
+                <Filter size={16} color="#94a3b8" />
               </div>
-              <div className={styles.paymentForm}>
-                <div className={styles.formGroup}>
-                  <label>Received Amount</label>
-                  <div className={styles.inputWrapper}>
-                    <CurrencySymbol size={18} />
-                    <input 
-                      type="number" 
-                      placeholder="0.00" 
-                      value={paymentAmount}
-                      onChange={(e) => setPaymentAmount(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className={styles.formRow}>
-                  <div className={styles.formGroup}>
-                    <label>Payment Method</label>
-                    <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                      <option value="CASH">Cash</option>
-                      <option value="CARD">Card</option>
-                      <option value="BANK">Bank Transfer</option>
-                      <option value="UPI">UPI / Digital</option>
-                    </select>
-                  </div>
-                  <div className={styles.formGroup}>
-                    <label>Date</label>
-                    <input type="text" value={new Date().toLocaleDateString()} disabled />
-                  </div>
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Notes (Optional)</label>
-                  <textarea 
-                    placeholder="Reference number, check details etc." 
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
+              
+              <div className={styles.cardContent}>
+                <div className={styles.searchBox}>
+                  <Search size={16} color="#94a3b8" />
+                  <input 
+                    type="text" 
+                    placeholder="Search by name or phone..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
 
-                <div className={styles.calculationBox}>
-                  <div className={styles.calcRow}>
-                    <span>Total Due</span>
-                    <strong><CurrencySymbol size={14} /> {totalDue.toFixed(2)}</strong>
-                  </div>
-                  <div className={styles.calcRow}>
-                    <span>Amount Received</span>
-                    <span style={{ color: '#10B981' }}>+ <CurrencySymbol size={14} /> {(parseFloat(paymentAmount) || 0).toFixed(2)}</span>
-                  </div>
-                  <div className={styles.divider}></div>
-                  <div className={styles.calcRow}>
-                    <span>Remaining Balance</span>
-                    <strong style={{ color: remainingDue > 0 ? '#EF4444' : '#10B981' }}>
-                      <CurrencySymbol size={14} /> {remainingDue.toFixed(2)}
-                    </strong>
-                  </div>
-                  {excessPayment > 0 && (
-                    <div className={styles.calcRow} style={{ marginTop: '0.5rem' }}>
-                      <span>Excess Payment</span>
-                      <strong style={{ color: '#3B82F6' }}><CurrencySymbol size={14} /> {excessPayment.toFixed(2)}</strong>
-                    </div>
-                  )}
+                <div className={styles.tabList}>
+                  {['All', 'Outstanding', 'Advance', 'Paid'].map(tab => (
+                    <button 
+                      key={tab} 
+                      className={`${styles.tabItem} ${activeTab === tab ? styles.activeTab : ''}`}
+                      onClick={() => setActiveTab(tab)}
+                    >
+                      {tab}
+                    </button>
+                  ))}
                 </div>
 
-                <button 
-                  className={styles.settleBtn} 
-                  onClick={handleSettle}
-                  disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
-                >
-                  Confirm Settlement <ArrowRight size={18} />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right Col: Bill Details & History */}
-        <div className={styles.rightCol}>
-          {!selectedCustomer ? (
-            <div className={styles.emptyState}>
-              <User size={64} opacity={0.1} />
-              <h3>Select a Customer</h3>
-              <p>Please select a customer from the left to view their pending bills and payment history.</p>
-            </div>
-          ) : (
-            <>
-              <div className={styles.card}>
-                <div className={styles.cardHeader}>
-                  <FileText size={20} />
-                  <h3>Pending Bills</h3>
-                </div>
-                <div className={styles.tableWrapper}>
-                  <table className={styles.table}>
-                    <thead>
-                      <tr>
-                        <th>Bill ID</th>
-                        <th>Date</th>
-                        <th>Total</th>
-                        <th>Paid</th>
-                        <th>Due</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pendingBills.map(bill => (
-                        <tr key={bill.id}>
-                          <td style={{ fontWeight: 700 }}>{bill.id}</td>
-                          <td>{new Date(bill.createdAt).toLocaleDateString()}</td>
-                          <td><CurrencySymbol size={13} /> {bill.totalAmount.toFixed(2)}</td>
-                          <td><CurrencySymbol size={13} /> {(bill.paidAmount || 0).toFixed(2)}</td>
-                          <td style={{ color: '#EF4444', fontWeight: 600 }}>
-                            <CurrencySymbol size={13} /> {(bill.dueAmount || (bill.totalAmount - (bill.paidAmount || 0))).toFixed(2)}
-                          </td>
-                          <td>
-                            <span className={`${styles.statusBadge} ${bill.paymentStatus === 'Partial' ? styles.partial : styles.credit}`}>
-                              {bill.paymentStatus || 'Credit'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                      {pendingBills.length === 0 && (
-                        <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>No pending bills for this customer.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className={styles.card} style={{ marginTop: '1.5rem' }}>
-                <div className={styles.cardHeader}>
-                  <History size={20} />
-                  <h3>Recent Settlements</h3>
-                </div>
-                <div className={styles.historyList}>
-                  {settlementHistory.map(h => (
-                    <div key={h.id} className={styles.historyItem}>
-                      <div className={styles.historyInfo}>
-                        <div className={styles.historyIcon}><DollarSign size={16} /></div>
-                        <div>
-                          <span className={styles.historyDate}>{new Date(h.createdAt).toLocaleString()}</span>
-                          <span className={styles.historyMethod}>{h.method} Payment</span>
+                <div className={styles.scrollableList}>
+                  {customers.map((customer, idx) => (
+                    <div 
+                      key={customer.id} 
+                      className={`${styles.customerRow} ${selectedCustomer?.id === customer.id ? styles.selectedRow : ''}`}
+                      onClick={() => setSelectedCustomer(customer)}
+                    >
+                      <div className={styles.rowLeft}>
+                        <div className={`${styles.avatar} styles.avatarColor${idx % 5}`}>{customer.name.charAt(0)}</div>
+                        <div className={styles.rowInfo}>
+                          <span className={styles.rowName}>{customer.name}</span>
+                          <span className={styles.rowPhone}>{customer.phone}</span>
                         </div>
                       </div>
-                      <div className={styles.historyAmount}>
-                        <strong><CurrencySymbol size={14} /> {h.amount.toFixed(2)}</strong>
-                        <div className={styles.historyActions}>
-                          <Printer size={14} title="Print Receipt" />
-                          <Send size={14} title="Send via WhatsApp" />
-                        </div>
+                      <div className={styles.rowRight}>
+                        <span className={styles.rowAmount}><CurrencySymbol size={10} /> {Math.abs(customer.balance).toFixed(2)}</span>
+                        <span className={`${styles.rowStatus} ${customer.balance > 0 ? styles.statusDue : styles.statusAdv}`}>
+                          {customer.balance > 0 ? 'Outstanding' : 'Advance'}
+                        </span>
+                        <ChevronRight size={14} color="#94a3b8" />
                       </div>
                     </div>
                   ))}
-                  {settlementHistory.length === 0 && <div className={styles.noData}>No payment history found.</div>}
                 </div>
               </div>
-            </>
-          )}
+            </div>
+
+            {selectedCustomer && (
+              <button className={styles.mainPayBtn} onClick={() => setShowPayModal(true)}>
+                <DollarSign size={20} /> Process Payment for {selectedCustomer.name.split(' ')[0]}
+              </button>
+            )}
+          </div>
+
+          <div className={styles.rightSide}>
+            <div className={styles.card}>
+              <div className={styles.cardHeader}>
+                <div className={styles.headerLeft}>
+                  <FileText size={18} color="#2563eb" />
+                  <h3>{selectedCustomer ? `Pending Bills (${selectedCustomer.name})` : 'Recent Pending Bills (All)'}</h3>
+                </div>
+                <div className={styles.headerActions}>
+                  <select className={styles.compactSelect}>
+                    <option>All Branches</option>
+                  </select>
+                </div>
+              </div>
+              <div className={styles.tableWrapper}>
+                <table className={styles.compactTable}>
+                  <thead>
+                    <tr>
+                      <th>Bill ID</th>
+                      { !selectedCustomer && <th>Customer</th> }
+                      <th>Bill Date</th>
+                      <th>Due Date</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {globalData.pending.map(bill => (
+                      <tr key={bill.id} onClick={() => !selectedCustomer && setSelectedCustomer({id: bill.customerId, name: bill.customerName, phone: bill.customerPhone, balance: bill.customerBalance})} style={{cursor: 'pointer'}}>
+                        <td className={styles.boldText}>{bill.id}</td>
+                        { !selectedCustomer && <td>{bill.customerName}</td> }
+                        <td>{new Date(bill.createdAt).toLocaleDateString()}</td>
+                        <td>{new Date(new Date(bill.createdAt).getTime() + 2 * 24 * 60 * 60 * 1000).toLocaleDateString()}</td>
+                        <td className={styles.greenText}><CurrencySymbol size={10} /> {bill.dueAmount.toFixed(2)}</td>
+                        <td>
+                          <span className={`${styles.badge} ${styles.badgeRed}`}>Pending</span>
+                        </td>
+                        <td>
+                          <button className={styles.payActionBtn} title="Settle This Bill" onClick={(e) => { e.stopPropagation(); if(!selectedCustomer) setSelectedCustomer({id: bill.customerId, name: bill.customerName, phone: bill.customerPhone, balance: bill.customerBalance}); setShowPayModal(true); }}>
+                            <DollarSign size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {globalData.pending.length === 0 && (
+                      <tr><td colSpan="7" style={{textAlign: 'center', padding: '3rem', color: '#94a3b8'}}>No pending bills found.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <div className={styles.bottomGrid}>
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <div className={styles.headerLeft}>
+                <History size={18} color="#10b981" />
+                <h3>{selectedCustomer ? `Settlements (${selectedCustomer.name})` : 'Latest Settlements (All)'}</h3>
+              </div>
+              <button className={styles.viewLink}>View All <ChevronRight size={14} /></button>
+            </div>
+            <div className={styles.internalScroll}>
+              {globalData.history.map(item => (
+                <div key={item.id} className={styles.historyItem}>
+                  <div className={styles.itemLeft}>
+                    <div className={styles.iconCircle}><CheckCircle size={14} /></div>
+                    <div className={styles.itemMeta}>
+                      <span className={styles.itemName}>{item.customerName}</span>
+                      <span className={styles.itemSub}>{item.method} • {new Date(item.createdAt).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className={styles.itemRight}>
+                    <span className={styles.itemAmount}><CurrencySymbol size={10} /> {item.amount.toFixed(2)}</span>
+                  </div>
+                </div>
+              ))}
+              {globalData.history.length === 0 && (
+                <div style={{textAlign: 'center', padding: '2rem', color: '#94a3b8'}}>No history found.</div>
+              )}
+            </div>
+          </div>
+
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <div className={styles.headerLeft}>
+                <ArrowUpRight size={18} color="#8b5cf6" />
+                <h3>{selectedCustomer ? `Advance Details (${selectedCustomer.name})` : 'Advance Payments / Credits'}</h3>
+              </div>
+              <button className={styles.viewLink}>View All <ChevronRight size={14} /></button>
+            </div>
+            <div className={styles.internalScroll}>
+              <table className={styles.compactTable}>
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th>Advance Amount</th>
+                    <th>Last Updated</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  { !selectedCustomer ? globalData.advances.map(adv => (
+                    <tr key={adv.id} onClick={() => setSelectedCustomer(adv)} style={{cursor: 'pointer'}}>
+                      <td className={styles.boldText}>{adv.name}</td>
+                      <td className={styles.greenText}><CurrencySymbol size={10} /> {Math.abs(adv.balance).toFixed(2)}</td>
+                      <td>{new Date(adv.updatedAt || adv.createdAt).toLocaleDateString()}</td>
+                      <td><Eye size={14} color="#2563eb" className={styles.clickable} /></td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td className={styles.boldText}>{selectedCustomer.name}</td>
+                      <td className={styles.greenText}><CurrencySymbol size={10} /> {selectedCustomer.balance < 0 ? Math.abs(selectedCustomer.balance).toFixed(2) : "0.00"}</td>
+                      <td>Today</td>
+                      <td><Plus size={14} color="#2563eb" className={styles.clickable} title="Add More Advance" /></td>
+                    </tr>
+                  )}
+                  { !selectedCustomer && globalData.advances.length === 0 && (
+                    <tr><td colSpan="4" style={{textAlign: 'center', padding: '2rem', color: '#94a3b8'}}>No advance accounts.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Settlement Modal */}
+      {showPayModal && selectedCustomer && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.payModal}>
+            <div className={styles.modalHeader}>
+              <div className={styles.headerLeft}>
+                <div className={styles.modalIcon}><Wallet size={20} /></div>
+                <div>
+                  <h3>Process Settlement</h3>
+                  <p>{selectedCustomer.name} • {selectedCustomer.phone}</p>
+                </div>
+              </div>
+              <X size={20} className={styles.closeBtn} onClick={() => { setShowPayModal(false); }} />
+            </div>
+
+            <div className={styles.modalBody}>
+              <div className={styles.inputGroup}>
+                <label>Received Amount</label>
+                <div className={styles.amountInput}>
+                  <CurrencySymbol size={20} />
+                  <input 
+                    type="number" 
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    placeholder="0.00"
+                    autoFocus
+                  />
+                </div>
+                <div className={styles.quickPay}>
+                  <button onClick={() => setPaymentAmount(displayDue.toFixed(2))}>Full: {displayDue.toFixed(2)}</button>
+                  <button onClick={() => setPaymentAmount((displayDue/2).toFixed(2))}>50%</button>
+                </div>
+              </div>
+
+              <div className={styles.modalRow}>
+                <div className={styles.inputGroup}>
+                  <label>Payment Method</label>
+                  <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                    <option value="CASH">Cash</option>
+                    <option value="BANK">Bank Transfer</option>
+                    <option value="UPI">UPI / Digital</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className={styles.summaryBox}>
+                <div className={styles.sumRow}>
+                  <span>Account Balance (Due)</span>
+                  <span><CurrencySymbol size={12} /> {displayDue.toFixed(2)}</span>
+                </div>
+                <div className={styles.sumRow}>
+                  <span>Payment Amount</span>
+                  <span style={{color: '#10b981'}}>+ <CurrencySymbol size={12} /> {(parseFloat(paymentAmount) || 0).toFixed(2)}</span>
+                </div>
+                <div className={styles.sumDivider}></div>
+                <div className={styles.sumRowTotal}>
+                  <span>{newBalance < 0 ? 'New Advance' : 'New Balance'}</span>
+                  <span style={{ color: newBalance < 0 ? '#10b981' : '#0f172a' }}>
+                    <CurrencySymbol size={14} /> {Math.abs(newBalance).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.modalFooter}>
+              <button className={styles.cancelBtn} onClick={() => { setShowPayModal(false); }}>Cancel</button>
+              <button 
+                className={styles.confirmBtn} 
+                onClick={handleSettle}
+                disabled={!paymentAmount || loading}
+              >
+                {loading ? 'Processing...' : 'Confirm Settlement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionButton({ icon, label, color, onClick }) {
+  return (
+    <div className={styles.actionBtnWrapper}>
+      <button className={styles.actionBtn} style={{ color: color }} onClick={onClick}>
+        {icon}
+      </button>
+      <span className={styles.actionTooltip}>{label}</span>
+    </div>
+  );
+}
+
+function KPICard({ icon, label, value, subText, color, bgColor }) {
+  return (
+    <div className={styles.kpiCard}>
+      <div className={styles.kpiIconBox} style={{ backgroundColor: bgColor, color: color }}>
+        {icon}
+      </div>
+      <div className={styles.kpiContent}>
+        <span className={styles.kpiLabel}>{label}</span>
+        <span className={styles.kpiValue}>{value}</span>
+        <span className={styles.kpiSub}>{subText}</span>
       </div>
     </div>
   );

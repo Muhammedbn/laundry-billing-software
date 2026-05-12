@@ -400,6 +400,18 @@
   border: 1px solid #FEE2E2;
 }
 
+.advanceBadge {
+  font-size: 0.7rem;
+  color: #2563eb;
+  font-weight: 800;
+  background: #EFF6FF;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  width: fit-content;
+  margin-top: 0.15rem;
+  border: 1px solid #DBEAFE;
+}
+
 .overdueBtn {
   grid-column: span 2;
   background: #FEF2F2;

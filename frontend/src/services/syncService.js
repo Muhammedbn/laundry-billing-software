@@ -7,7 +7,7 @@ export const syncData = async () => {
   }
 
   try {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const user = JSON.parse(sessionStorage.getItem('user') || '{}');
     const shopId = user.shopId || 'SHOP_01';
 
     // 1. Fetch unsynced local data
@@ -22,7 +22,7 @@ export const syncData = async () => {
     }
 
     // 2. Get last sync timestamp from local storage
-    const lastSyncTimestamp = localStorage.getItem('lastSyncTimestamp') || null;
+    const lastSyncTimestamp = sessionStorage.getItem('lastSyncTimestamp') || null;
 
     // 3. Send payload to backend
     const payload = {
@@ -68,7 +68,7 @@ export const syncData = async () => {
       }
 
       // Update last sync time
-      localStorage.setItem('lastSyncTimestamp', response.data.timestamp);
+      sessionStorage.setItem('lastSyncTimestamp', response.data.timestamp);
       console.log('Sync completed successfully');
       return true;
     }

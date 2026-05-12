@@ -8,23 +8,25 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { QRCodeSVG } from 'qrcode.react';
 import { useSettings } from '../context/SettingsContext';
+import { t } from '../utils/translations';
 import CurrencySymbol from '../components/CurrencySymbol';
+import DressTag from '../components/DressTag';
 import styles from './Orders.module.css';
 
 const API_BASE = 'http://localhost:3000/api';
 
 const STATUS_COLORS = {
   'Payment Pending': styles.statusPending,
-  'Paid': styles.statusPaid,
-  'Credit': styles.statusCredit,
-  'Confirmed': styles.statusConfirmed,
-  'Picked Up': styles.statusPickedUp,
-  'Washing': styles.statusWashing,
-  'Drying': styles.statusDrying,
+  'Paid': styles.statusDelivered,
+  'Credit': styles.statusCancelled,
+  'Confirmed': styles.statusProcessing,
+  'Picked Up': styles.statusProcessing,
+  'Washing': styles.statusProcessing,
+  'Drying': styles.statusProcessing,
   'Ironing': styles.statusIroning,
-  'Ready': styles.statusReady,
-  'Ready to Pick up': styles.statusPickUp,
-  'Out for Delivery': styles.statusOutForDelivery,
+  'Ready': styles.statusDelivery,
+  'Ready to Pick up': styles.statusDelivery,
+  'Out for Delivery': styles.statusDelivery,
   'Delivered': styles.statusDelivered,
   'Cancelled': styles.statusCancelled
 };
@@ -37,6 +39,7 @@ export default function Orders({ isPendingView = false }) {
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState(querySearch);
   const [selectedOrder, setSelectedOrder] = useState(null);
   
@@ -45,19 +48,21 @@ export default function Orders({ isPendingView = false }) {
   const [payMethod, setPayMethod] = useState('CASH');
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [pendingSubFilter, setPendingSubFilter] = useState('All'); // 'All', 'Pending', 'Overdue'
+  const [isPrintingTags, setIsPrintingTags] = useState(false);
 
   // Helper to determine if an order is overdue
   const isOverdue = (order) => {
-    if (order.status !== 'Credit' && order.status !== 'Payment Pending') return false;
+    if (order.dueAmount <= 0 && order.paymentStatus === 'Paid') return false;
     const createdDate = new Date(order.createdAt);
     const diffTime = Math.abs(new Date() - createdDate);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays > 7; // Overdue after 7 days
+    const overdueLimit = settings.overdueDays || 7;
+    return diffDays > overdueLimit;
   };
 
   // Filtering logic
   let filteredOrders = isPendingView 
-    ? orders.filter(o => o.status === 'Credit' || o.status === 'Payment Pending') 
+    ? orders.filter(o => o.dueAmount > 0 || o.paymentStatus !== 'Paid') 
     : orders;
 
   if (isPendingView) {
@@ -74,11 +79,17 @@ export default function Orders({ isPendingView = false }) {
     .filter(o => o.status === 'Paid')
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
   const totalPending = orders
-    .filter(o => o.status === 'Credit' || o.status === 'Payment Pending')
-    .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+    .filter(o => o.dueAmount > 0 || o.paymentStatus !== 'Paid')
+    .reduce((sum, o) => sum + (o.dueAmount || 0), 0);
   
   const overdueOrdersList = orders.filter(o => isOverdue(o));
   const overdueAmount = overdueOrdersList.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+  const counts = {
+    all: orders.filter(o => o.dueAmount > 0 || o.paymentStatus !== 'Paid').length,
+    pending: orders.filter(o => (o.dueAmount > 0 || o.paymentStatus !== 'Paid') && !isOverdue(o)).length,
+    overdue: overdueOrdersList.length
+  };
 
   const dueSoonOrders = orders.filter(o => {
     if (o.status !== 'Credit' && o.status !== 'Payment Pending') return false;
@@ -97,8 +108,55 @@ export default function Orders({ isPendingView = false }) {
   const fetchOrders = async () => {
     try {
       setLoading(true);
+      
+      // Try local DB first if in Electron
+      if (window.electronAPI?.dbQuery) {
+        let query = 'SELECT * FROM orders';
+        let params = [];
+        if (searchTerm) {
+          query += ' WHERE id LIKE ? OR billNumber LIKE ? OR customerName LIKE ? OR customerPhone LIKE ?';
+          const term = `%${searchTerm}%`;
+          params = [term, term, term, term];
+        }
+        query += ' ORDER BY createdAt DESC';
+        const res = await window.electronAPI.dbQuery(query, params);
+        if (res.success) {
+          setOrders(res.data);
+          
+          // Auto-open if exact match on bill number or ID (robust matching)
+          if (searchTerm && res.data.length === 1) {
+            const found = res.data[0];
+            const cleanSearch = searchTerm.replace('#', '').replace('ORDER:', '').trim().toLowerCase();
+            const cleanId = (found.id || '').toString().replace('#', '').trim().toLowerCase();
+            const cleanBill = (found.billNumber || '').toString().replace('#', '').trim().toLowerCase();
+            
+            if (cleanId === cleanSearch || cleanBill === cleanSearch) {
+              setSelectedOrder(found);
+              setShowModal(true);
+            }
+          }
+          
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Fallback to remote API
       const res = await axios.get(`${API_BASE}/orders/search?q=${encodeURIComponent(searchTerm)}`);
       setOrders(res.data);
+      
+      // Auto-open if exact match on bill number or ID (robust matching)
+      if (searchTerm && res.data.length === 1) {
+        const found = res.data[0];
+        const cleanSearch = searchTerm.replace('#', '').replace('ORDER:', '').trim().toLowerCase();
+        const cleanId = (found.id || '').toString().replace('#', '').trim().toLowerCase();
+        const cleanBill = (found.billNumber || '').toString().replace('#', '').trim().toLowerCase();
+        
+        if (cleanId === cleanSearch || cleanBill === cleanSearch) {
+          setSelectedOrder(found);
+          setShowModal(true);
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch orders:', err);
     } finally {
@@ -106,48 +164,89 @@ export default function Orders({ isPendingView = false }) {
     }
   };
 
-  const handleUpdateStatus = async (newStatus) => {
-    if (!selectedOrder) return;
+  const handleUpdateStatus = async (newStatus, orderOverride = null) => {
+    const orderToUpdate = orderOverride || selectedOrder;
+    if (!orderToUpdate) return;
     
-    if (newStatus === 'Paid' && selectedOrder.status !== 'Paid') {
-      setShowPayModal(true);
-      return;
-    }
-
     if (['Cancelled', 'Delivered'].includes(newStatus)) {
-      if (!window.confirm(`Are you sure you want to change status to ${newStatus}?`)) return;
+      if (!window.confirm(`Are you sure you want to mark Order #${orderToUpdate.id} as ${newStatus}?`)) return;
     }
 
     try {
       // 1. Update Backend
-      const res = await axios.patch(`${API_BASE}/orders/${encodeURIComponent(selectedOrder.id)}/status`, {
+      await axios.patch(`${API_BASE}/orders/${encodeURIComponent(orderToUpdate.id)}/status`, {
         status: newStatus,
         updatedBy: 'Admin Staff'
       });
 
       // 2. Update Local DB
       if (window.electronAPI?.dbQuery) {
+        const history = typeof orderToUpdate.statusHistory === 'string' ? JSON.parse(orderToUpdate.statusHistory) : (orderToUpdate.statusHistory || []);
+        const newHistory = [...history, { status: newStatus, updatedBy: 'Admin Staff', timestamp: new Date().toISOString() }];
+        
         await window.electronAPI.dbQuery(
-          'UPDATE orders SET status = ?, updatedAt = ? WHERE id = ?',
-          [newStatus, new Date().toISOString(), selectedOrder.id]
+          'UPDATE orders SET status = ?, statusHistory = ?, updatedAt = ? WHERE id = ?',
+          [newStatus, JSON.stringify(newHistory), new Date().toISOString(), orderToUpdate.id]
         );
       }
 
       // 3. Update State
-      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, status: newStatus } : o));
-      setSelectedOrder(res.data);
-      alert('Status updated successfully!');
+      setOrders(prev => prev.map(o => o.id === orderToUpdate.id ? { ...o, status: newStatus } : o));
+      if (selectedOrder && selectedOrder.id === orderToUpdate.id) {
+        setSelectedOrder(prev => ({ ...prev, status: newStatus }));
+      }
+      // alert('Workflow updated successfully!');
     } catch (err) {
       console.error('Failed to update status:', err);
-      // Fallback state update if backend fails
-      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, status: newStatus } : o));
-      alert('Status updated locally (Cloud sync failed)');
+      setOrders(prev => prev.map(o => o.id === orderToUpdate.id ? { ...o, status: newStatus } : o));
+      alert('Workflow updated locally (Cloud sync failed)');
+    }
+  };
+
+  const handleUpdatePaymentStatus = async (newPayStatus) => {
+    if (!selectedOrder) return;
+    
+    if (newPayStatus === 'Paid') {
+      setShowPayModal(true);
+      return;
+    }
+
+    try {
+      if (window.electronAPI?.dbQuery) {
+        await window.electronAPI.dbQuery(
+          'UPDATE orders SET paymentStatus = ?, updatedAt = ? WHERE id = ?',
+          [newPayStatus, new Date().toISOString(), selectedOrder.id]
+        );
+        
+        // If changing to Credit, update customer balance
+        if (newPayStatus === 'Credit' && selectedOrder.customerId) {
+           await window.electronAPI.dbQuery(
+             'UPDATE customers SET balance = balance + ? WHERE id = ?',
+             [selectedOrder.dueAmount || selectedOrder.totalAmount, selectedOrder.customerId]
+           );
+        }
+      }
+
+      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, paymentStatus: newPayStatus } : o));
+      setSelectedOrder(prev => ({ ...prev, paymentStatus: newPayStatus }));
+      alert('Payment status updated!');
+    } catch (err) {
+      console.error('Failed to update payment status:', err);
+      alert('Update failed: ' + err.message);
     }
   };
 
   const handlePrint = (orderId) => {
     // Navigate to invoice page which handles printing
     navigate(`/invoice/${encodeURIComponent(orderId)}`);
+  };
+
+  const handlePrintTags = () => {
+    setIsPrintingTags(true);
+    setTimeout(() => {
+      window.print();
+      setIsPrintingTags(false);
+    }, 500);
   };
 
   const confirmPaidStatus = async () => {
@@ -317,19 +416,19 @@ export default function Orders({ isPendingView = false }) {
             className={`${styles.filterTab} ${pendingSubFilter === 'All' ? styles.filterTabActive : ''}`}
             onClick={() => setPendingSubFilter('All')}
           >
-            All ({orders.filter(o => o.status === 'Credit').length})
+            {t('all', settings.language)} ({counts.all})
           </button>
           <button 
             className={`${styles.filterTab} ${pendingSubFilter === 'Pending' ? styles.filterTabActive : ''}`}
             onClick={() => setPendingSubFilter('Pending')}
           >
-            Pending ({orders.filter(o => o.status === 'Credit' && !isOverdue(o)).length})
+            {t('pending', settings.language)} ({counts.pending})
           </button>
           <button 
             className={`${styles.filterTab} ${pendingSubFilter === 'Overdue' ? styles.filterTabActiveOverdue : ''}`}
             onClick={() => setPendingSubFilter('Overdue')}
           >
-            Overdue ({overdueOrdersList.length})
+            {t('overdue', settings.language)} ({counts.overdue})
           </button>
         </div>
       )}
@@ -393,12 +492,12 @@ export default function Orders({ isPendingView = false }) {
           <table className={styles.ordersTable}>
             <thead>
               <tr>
-                <th>Order Details</th>
-                <th>Customer</th>
-                <th>Total Amount</th>
-                <th>Status</th>
-                <th>Date</th>
-                <th>Actions</th>
+                <th>{t('orderId', settings.language)}</th>
+                <th>{t('customer', settings.language)}</th>
+                <th>{t('totalAmount', settings.language)}</th>
+                <th>{t('status', settings.language)}</th>
+                <th>{t('date', settings.language)}</th>
+                <th>{t('actions', settings.language)}</th>
               </tr>
             </thead>
             <tbody>
@@ -443,14 +542,28 @@ export default function Orders({ isPendingView = false }) {
                     </td>
                     <td className={styles.amountText}><CurrencySymbol size={14} /> {order.totalAmount?.toFixed(2)}</td>
                     <td>
-                      <span className={`${styles.statusBadge} ${STATUS_COLORS[order.status]}`}>
-                        {order.status}
-                      </span>
+                      {(!['Payment Pending', 'Paid', 'Credit'].includes(order.status)) ? (
+                        <span className={`${styles.statusBadge} ${STATUS_COLORS[order.status]}`}>
+                          {order.status}
+                        </span>
+                      ) : (
+                        <span className={`${styles.statusBadge} ${styles.statusProcessing}`}>
+                          Confirmed
+                        </span>
+                      )}
                     </td>
                     <td className={styles.dateText}>{new Date(order.createdAt).toLocaleDateString()}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        {order.status !== 'Paid' && order.status !== 'Cancelled' && (
+                        {order.paymentStatus === 'Paid' || order.status === 'Paid' ? (
+                          <span className={styles.paidActionBadge}>
+                            <CheckCircle size={14} /> Paid
+                          </span>
+                        ) : (order.paymentStatus === 'Credit' || order.paymentStatus === 'Partial') ? (
+                          <span className={styles.creditActionBadge}>
+                            <AlertCircle size={14} /> {order.paymentStatus}
+                          </span>
+                        ) : order.status !== 'Cancelled' ? (
                           <button 
                             className={styles.payBtn}
                             onClick={(e) => {
@@ -461,8 +574,19 @@ export default function Orders({ isPendingView = false }) {
                           >
                             Pay
                           </button>
+                        ) : null}
+                         <MoreHorizontal size={18} className={styles.moreBtn} />
+                        {order.status !== 'Delivered' && order.status !== 'Cancelled' && (
+                          <button 
+                            className={styles.deliverBtn}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleUpdateStatus('Delivered', order);
+                            }}
+                          >
+                            Deliver
+                          </button>
                         )}
-                        <MoreHorizontal size={18} className={styles.moreBtn} />
                       </div>
                     </td>
                   </tr>
@@ -517,15 +641,15 @@ export default function Orders({ isPendingView = false }) {
                   <div className={styles.section}>
                     <h3>Order Items</h3>
                     <div className={styles.itemsList}>
-                      {selectedOrder.items.map((item, i) => (
+                      {(typeof selectedOrder.items === 'string' ? JSON.parse(selectedOrder.items) : selectedOrder.items).map((item, i) => (
                         <div key={i} className={styles.orderItem}>
                           <span>{item.qty} x {item.name} ({item.type})</span>
                           <span><CurrencySymbol size={12} /> {(item.price * item.qty).toFixed(2)}</span>
                         </div>
                       ))}
                       <div className={styles.orderTotal}>
-                        <span>Total Paid via {selectedOrder.paymentMethod}</span>
-                        <span><CurrencySymbol size={14} /> {selectedOrder.totalAmount.toFixed(2)}</span>
+                        <span>Total Paid via {selectedOrder.paymentMethod || 'CASH'}</span>
+                        <span><CurrencySymbol size={14} /> {selectedOrder.totalAmount?.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -533,12 +657,12 @@ export default function Orders({ isPendingView = false }) {
                   <div className={styles.section}>
                     <h3>Status History</h3>
                     <div className={styles.timeline}>
-                      {selectedOrder.statusHistory?.map((h, i) => (
+                      {(typeof selectedOrder.statusHistory === 'string' ? JSON.parse(selectedOrder.statusHistory) : (selectedOrder.statusHistory || [])).map((h, i) => (
                         <div key={i} className={styles.timelineItem}>
                           <div className={styles.timelineDot}></div>
                           <div className={styles.timelineContent}>
                             <p className={styles.timelineStatus}>{h.status}</p>
-                            <p className={styles.timelineMeta}>{h.updatedBy} • {new Date(h.timestamp).toLocaleString()}</p>
+                            <p className={styles.timelineMeta}>{h.updatedBy || 'Staff'} • {new Date(h.timestamp).toLocaleString()}</p>
                           </div>
                         </div>
                       ))}
@@ -554,16 +678,13 @@ export default function Orders({ isPendingView = false }) {
                   </div>
 
                   <div className={styles.statusAction}>
-                    <label>CHANGE STATUS</label>
+                    <label>WORKFLOW STATUS</label>
                     <div className={styles.statusSelectWrapper}>
                       <select 
                         value={selectedOrder.status} 
                         onChange={(e) => handleUpdateStatus(e.target.value)}
                         className={styles.statusSelect}
                       >
-                        <option>Payment Pending</option>
-                        <option>Paid</option>
-                        <option>Credit</option>
                         <option>Confirmed</option>
                         <option>Picked Up</option>
                         <option>Washing</option>
@@ -579,6 +700,24 @@ export default function Orders({ isPendingView = false }) {
                     </div>
                   </div>
 
+                  <div className={styles.statusAction} style={{ marginTop: '1rem' }}>
+                    <label>PAYMENT STATUS</label>
+                    <div className={styles.statusSelectWrapper}>
+                      <select 
+                        value={selectedOrder.paymentStatus || 'Pending'} 
+                        onChange={(e) => handleUpdatePaymentStatus(e.target.value)}
+                        className={styles.statusSelect}
+                        style={{ borderLeftColor: selectedOrder.paymentStatus === 'Paid' ? '#10B981' : '#F59E0B' }}
+                      >
+                        <option value="Pending">Pending</option>
+                        <option value="Paid">Paid</option>
+                        <option value="Credit">Credit</option>
+                        <option value="Partial">Partial</option>
+                      </select>
+                      <ChevronDown size={18} />
+                    </div>
+                  </div>
+
                   <div className={styles.actionBtns}>
                     <button 
                       className={styles.printBtn}
@@ -586,12 +725,24 @@ export default function Orders({ isPendingView = false }) {
                     >
                       <Printer size={18} /> Print Receipt
                     </button>
-                    <button className={styles.secondaryBtn}><History size={18} /> View Full Logs</button>
-                  </div>
+                    <button 
+                      className={styles.tagBtn}
+                      onClick={handlePrintTags}
+                    >
+                      <QrCode size={18} /> Print Garment Tags
+                    </button>
+                   </div>
                 </div>
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Hidden Tag Printing Area */}
+      {isPrintingTags && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'white', zIndex: 99999 }}>
+          <DressTag order={selectedOrder} />
         </div>
       )}
 

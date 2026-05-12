@@ -1,0 +1,121 @@
+.tagContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px;
+}
+
+.dressTag {
+  width: 200px;
+  height: 120px;
+  border: 1px dashed #cbd5e1;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  color: black;
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+}
+
+.tagHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 4px;
+  margin-bottom: 6px;
+}
+
+.orderId {
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.tagCount {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.tagBody {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.qrWrapper {
+  background: white;
+  padding: 2px;
+}
+
+.itemDetails {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0; /* allows text to truncate */
+}
+
+.itemName {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.itemType {
+  margin: 0;
+  font-size: 0.65rem;
+  color: #475569;
+  text-transform: uppercase;
+}
+
+.customerName {
+  margin: 2px 0 0 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.tagFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: auto;
+  font-size: 0.6rem;
+  color: #94a3b8;
+}
+
+.addons {
+  font-size: 0.55rem;
+  font-style: italic;
+  max-width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Print Optimization */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .tagContainer, .tagContainer * {
+    visibility: visible;
+  }
+  .tagContainer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    display: block;
+    padding: 0;
+  }
+  .dressTag {
+    border: 1px solid black;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+}

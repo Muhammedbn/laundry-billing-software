@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Wallet, Landmark, ArrowUpRight, ArrowDownLeft, 
   Plus, Search, Filter, Calendar, MoreHorizontal,
@@ -7,6 +7,7 @@ import {
   ShoppingBag, Truck, Zap, Droplets, Star, Trash2
 } from 'lucide-react';
 import CurrencySymbol from '../components/CurrencySymbol';
+import { useSettings } from '../context/SettingsContext';
 import styles from './Accounts.module.css';
 
 const ICON_OPTIONS = [
@@ -21,8 +22,20 @@ const ICON_OPTIONS = [
 ];
 
 export default function Accounts() {
+  const navigate = useNavigate();
   const { type } = useParams(); // 'cash' or 'bank'
   const isCash = type === 'cash';
+
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
+  const isAuthorized = user.role === 'super_admin' || user.role === 'manager';
+
+  useEffect(() => {
+    if (!isAuthorized) {
+      navigate('/');
+    }
+  }, [isAuthorized, navigate]);
+
+  if (!isAuthorized) return null;
   
   const [transactions, setTransactions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -44,7 +57,7 @@ export default function Accounts() {
   const fetchData = async () => {
     if (window.electronAPI?.dbQuery) {
       try {
-        // Ensure table exists (in case app wasn't restarted after schema update)
+        // Ensure table exists and has correct columns
         await window.electronAPI.dbQuery(`
           CREATE TABLE IF NOT EXISTS account_transactions (
             id TEXT PRIMARY KEY,
@@ -56,9 +69,15 @@ export default function Accounts() {
             description TEXT,
             date TEXT,
             isSynced INTEGER DEFAULT 0,
-            updatedAt TEXT
+            updatedAt TEXT,
+            icon TEXT,
+            bankAccountId TEXT
           )
         `, []);
+
+        // Compatibility check: add columns if they don't exist
+        try { await window.electronAPI.dbQuery('ALTER TABLE account_transactions ADD COLUMN icon TEXT', []); } catch(e) {}
+        try { await window.electronAPI.dbQuery('ALTER TABLE account_transactions ADD COLUMN bankAccountId TEXT', []); } catch(e) {}
 
         const accType = type.toUpperCase();
         const res = await window.electronAPI.dbQuery(
@@ -142,10 +161,16 @@ export default function Accounts() {
     }
   };
 
-  const filteredTransactions = transactions.filter(t => 
-    t.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.category?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const { settings } = useSettings();
+  const bankAccounts = settings.bankAccounts || [];
+  const [selectedBankId, setSelectedBankId] = useState('all');
+
+  const filteredTransactions = transactions.filter(t => {
+    const matchesSearch = t.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          t.category?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesBank = selectedBankId === 'all' || t.bankAccountId === selectedBankId;
+    return matchesSearch && matchesBank;
+  });
 
   return (
     <div className={styles.container}>
@@ -196,6 +221,21 @@ export default function Accounts() {
           <div className={styles.cardHeader}>
             <h3>Transaction History</h3>
             <div className={styles.filters}>
+              {!isCash && bankAccounts.length > 0 && (
+                <div className={styles.search} style={{ width: '220px' }}>
+                  <Landmark size={16} />
+                  <select 
+                    value={selectedBankId}
+                    onChange={(e) => setSelectedBankId(e.target.value)}
+                    style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '0.85rem' }}
+                  >
+                    <option value="all">All Bank Accounts</option>
+                    {bankAccounts.map((acc, idx) => (
+                      <option key={idx} value={acc.bankName}>{acc.bankName}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className={styles.search}>
                 <Search size={16} />
                 <input 
@@ -205,7 +245,6 @@ export default function Accounts() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              <button className={styles.filterBtn}><Filter size={16} /> Filter</button>
             </div>
           </div>
 

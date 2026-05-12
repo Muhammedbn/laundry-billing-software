@@ -2,18 +2,35 @@ import React, { useState, useEffect } from 'react';
 import {
   Upload, CheckCircle, Image as ImageIcon, X, Sliders, Scissors,
   Mail, Phone, Globe, Building2, MapPin, CreditCard, Hash, FileText,
-  Percent, Settings2, Info, Plus
+  Percent, Settings2, Info, Plus, Trash2, Star, DollarSign, Clock
 } from 'lucide-react';
 import Cropper from 'react-easy-crop';
 import getCroppedImg from '../utils/cropImage';
 import { useSettings } from '../context/SettingsContext';
 import CurrencySymbol from '../components/CurrencySymbol';
 import InvoiceTemplate from '../components/InvoiceTemplate';
+import { useNavigate } from 'react-router-dom';
 import styles from './Settings.module.css';
 
 export default function Settings() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Company Info');
   const { settings, updateSettings } = useSettings();
+  
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
+  const isSuperAdmin = user.role === 'super_admin' || user.role === 'admin';
+  const isManager = user.role === 'manager';
+  const isAuthorized = isSuperAdmin || isManager;
+
+  useEffect(() => {
+    if (!isAuthorized) {
+      navigate('/');
+    }
+  }, [isAuthorized, navigate]);
+
+  if (!isAuthorized) return null;
+
+  const tabs = ['General', 'Company Info', 'Tax Settings', 'Bill Templates', 'Payment Gateways'];
 
   // Cropper States
   const [imageToCrop, setImageToCrop] = useState(null);
@@ -80,7 +97,7 @@ export default function Settings() {
       </div>
 
       <div className={styles.tabs}>
-        {['Company Info', 'Tax Settings', 'Bill Templates', 'User Permissions', 'Inventory Rules', 'Payment Gateways'].map(tab => (
+        {tabs.map(tab => (
           <div
             key={tab}
             className={`${styles.tab} ${activeTab === tab ? styles.active : ''}`}
@@ -94,6 +111,125 @@ export default function Settings() {
       <div className={styles.settingsGrid}>
         <div className={styles.mainContent}>
 
+
+          {activeTab === 'General' && (
+            <div className={styles.profileContainer}>
+              <div className={styles.card}>
+                <h2 className={styles.cardTitle}>Regional & System Preferences</h2>
+                <div className={styles.formGrid}>
+                  <div className={styles.formGroup}>
+                    <label>System Language</label>
+                    <select 
+                      className={styles.inputField}
+                      value={settings.language || 'English'}
+                      onChange={(e) => updateSettings({ language: e.target.value })}
+                    >
+                      <option value="English">English</option>
+                      <option value="Arabic">Arabic (العربية)</option>
+                      <option value="Hindi">Hindi (हिन्दी)</option>
+                    </select>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Currency Symbol</label>
+                    <div className={styles.inputWrapper}>
+                      <DollarSign size={18} color="#94A3B8" />
+                      <input 
+                        type="text" 
+                        className={styles.inputField}
+                        value={settings.currencySymbol || 'AED'}
+                        onChange={(e) => updateSettings({ currencySymbol: e.target.value })}
+                        placeholder="e.g. د.إ or AED"
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Date Format</label>
+                    <select 
+                      className={styles.inputField}
+                      value={settings.dateFormat || 'DD/MM/YYYY'}
+                      onChange={(e) => updateSettings({ dateFormat: e.target.value })}
+                    >
+                      <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                      <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                      <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                    </select>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Time Format</label>
+                    <select 
+                      className={styles.inputField}
+                      value={settings.timeFormat || '12h'}
+                      onChange={(e) => updateSettings({ timeFormat: e.target.value })}
+                    >
+                      <option value="12h">12-Hour (AM/PM)</option>
+                      <option value="24h">24-Hour</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className={styles.card}>
+                <h2 className={styles.cardTitle}>Automation & Defaults</h2>
+                <div className={styles.formGrid}>
+                  <div className={styles.formGroup}>
+                    <label>Auto-Print Receipt</label>
+                    <div className={styles.toggleRow}>
+                      <span className={styles.toggleLabel}>Automatically trigger print dialog after order</span>
+                      <div 
+                        className={`${styles.switch} ${settings.autoPrint ? styles.switchOn : ''}`}
+                        onClick={() => updateSettings({ autoPrint: !settings.autoPrint })}
+                      >
+                        <div className={styles.switchHandle}></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Default Payment Method</label>
+                    <select 
+                      className={styles.inputField}
+                      value={settings.defaultPaymentMethod || 'CASH'}
+                      onChange={(e) => updateSettings({ defaultPaymentMethod: e.target.value })}
+                    >
+                      <option value="CASH">Cash</option>
+                      <option value="CARD">Card</option>
+                      <option value="UPI">UPI / QR</option>
+                      <option value="CREDIT">Store Credit</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className={styles.card}>
+                <h2 className={styles.cardTitle}>Operational Rules</h2>
+                <div className={styles.formGrid}>
+                  <div className={styles.formGroup}>
+                    <label>Default Overdue Period (Days)</label>
+                    <div className={styles.inputWrapper}>
+                      <Clock size={18} color="#94A3B8" />
+                      <input 
+                        type="number" 
+                        className={styles.inputField}
+                        value={settings.overdueDays || 7}
+                        onChange={(e) => updateSettings({ overdueDays: parseInt(e.target.value) })}
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Default Credit Limit</label>
+                    <div className={styles.inputWrapper}>
+                      <CurrencySymbol size={18} />
+                      <input 
+                        type="number" 
+                        className={styles.inputField}
+                        value={settings.defaultCreditLimit || 500}
+                        onChange={(e) => updateSettings({ defaultCreditLimit: parseFloat(e.target.value) })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {activeTab === 'Company Info' && (
             <div className={styles.profileContainer}>
@@ -476,10 +612,128 @@ export default function Settings() {
             </div>
           )}
 
-          {activeTab === 'User Permissions' && (
-            <div className={styles.card}>
-              <h2 className={styles.cardTitle}>Staff Roles</h2>
-              {/* Permissions table content... */}
+          {activeTab === 'Payment Gateways' && (
+            <div className={styles.profileContainer}>
+              <div className={styles.card}>
+                <div className={styles.cardHeader}>
+                  <div>
+                    <h2 className={styles.cardTitle}>Bank Transfer Details</h2>
+                    <p style={{ fontSize: '0.85rem', color: '#64748B' }}>Add one or more bank accounts for customer payments.</p>
+                  </div>
+                  <button 
+                    className={styles.saveBtn} 
+                    style={{ background: '#2563EB', fontSize: '0.8rem', padding: '0.5rem 1rem' }}
+                    onClick={() => {
+                      const newAccounts = [...(settings.bankAccounts || []), { id: Date.now().toString(), bankName: '', accountNumber: '', iban: '' }];
+                      updateSettings({ bankAccounts: newAccounts });
+                    }}
+                  >
+                    <Plus size={16} /> Add New Bank
+                  </button>
+                </div>
+
+                <div className={styles.bankAccountsList} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1.5rem' }}>
+                  {(settings.bankAccounts || []).map((account, index) => (
+                    <div key={index} className={`${styles.bankAccountItem} ${settings.defaultBankId === account.id ? styles.defaultBank : ''}`} style={{ border: '1px solid #E2E8F0', padding: '1.5rem', borderRadius: '12px', position: 'relative' }}>
+                      <div className={styles.bankItemActions} style={{ position: 'absolute', top: '1rem', right: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                        <button 
+                          className={styles.defaultToggle}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', color: settings.defaultBankId === account.id ? '#F59E0B' : '#94A3B8', fontWeight: 700, fontSize: '0.8rem' }}
+                          onClick={() => updateSettings({ defaultBankId: account.id })}
+                        >
+                          <Star size={18} fill={settings.defaultBankId === account.id ? '#F59E0B' : 'none'} />
+                          {settings.defaultBankId === account.id ? 'Default Account' : 'Set as Default'}
+                        </button>
+                        <button 
+                          style={{ background: 'transparent', border: 'none', color: '#EF4444', cursor: 'pointer' }}
+                          onClick={() => {
+                            const newAccounts = settings.bankAccounts.filter((_, i) => i !== index);
+                            const newDefault = settings.defaultBankId === account.id ? '' : settings.defaultBankId;
+                            updateSettings({ bankAccounts: newAccounts, defaultBankId: newDefault });
+                          }}
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+
+                      <div className={styles.formGrid}>
+                        <div className={styles.formGroup}>
+                          <label>Bank Name</label>
+                          <div className={styles.inputWrapper}>
+                            <Building2 size={18} color="#94A3B8" />
+                            <input
+                              type="text"
+                              className={styles.inputField}
+                              placeholder="e.g. Emirates NBD"
+                              value={account.bankName}
+                              onChange={(e) => {
+                                const newAccounts = [...settings.bankAccounts];
+                                newAccounts[index].bankName = e.target.value;
+                                updateSettings({ bankAccounts: newAccounts });
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label>Account Number</label>
+                          <div className={styles.inputWrapper}>
+                            <Hash size={18} color="#94A3B8" />
+                            <input
+                              type="text"
+                              className={styles.inputField}
+                              placeholder="00000000000"
+                              value={account.accountNumber}
+                              onChange={(e) => {
+                                const newAccounts = [...settings.bankAccounts];
+                                newAccounts[index].accountNumber = e.target.value;
+                                updateSettings({ bankAccounts: newAccounts });
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+                          <label>IBAN Number</label>
+                          <div className={styles.inputWrapper}>
+                            <FileText size={18} color="#94A3B8" />
+                            <input
+                              type="text"
+                              className={styles.inputField}
+                              placeholder="AE00 0000 0000 0000 0000 000"
+                              value={account.iban}
+                              onChange={(e) => {
+                                const newAccounts = [...settings.bankAccounts];
+                                newAccounts[index].iban = e.target.value.toUpperCase();
+                                updateSettings({ bankAccounts: newAccounts });
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {(settings.bankAccounts || []).length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '3rem', background: '#F8FAFC', borderRadius: '12px', border: '1px dashed #CBD5E1' }}>
+                      <Building2 size={40} color="#94A3B8" style={{ marginBottom: '1rem' }} />
+                      <p style={{ color: '#64748B', fontSize: '0.9rem' }}>No bank accounts added yet.</p>
+                      <button 
+                        style={{ marginTop: '1rem', color: '#2563EB', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
+                        onClick={() => updateSettings({ bankAccounts: [{ bankName: '', accountNumber: '', iban: '' }] })}
+                      >
+                        Click to add your first bank account
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className={styles.card} style={{ background: '#F8FAFC', border: '1px dashed #CBD5E1' }}>
+                <h3 className={styles.cardTitle} style={{ fontSize: '1rem', color: '#475569' }}>Payment Note</h3>
+                <p style={{ fontSize: '0.875rem', color: '#64748B', lineHeight: '1.6' }}>
+                  These details will be displayed on your invoices to allow customers to pay via bank transfer. 
+                  Please ensure all information is accurate to avoid payment delays.
+                </p>
+              </div>
             </div>
           )}
         </div>

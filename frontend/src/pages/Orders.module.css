@@ -228,20 +228,36 @@
   display: inline-block;
 }
 
-.statusPending { background: #FEF3C7; color: #92400E; }
-.statusPaid { background: #DCFCE7; color: #166534; }
-.statusCredit { background: #FEE2E2; color: #991B1B; }
-.statusConfirmed { background: #E0F2FE; color: #0369A1; }
-.statusPickedUp { background: #DBEAFE; color: #1E40AF; }
-.statusWashing { background: #E0E7FF; color: #3730A3; }
-.statusDrying { background: #FFF7ED; color: #9A3412; }
-.statusIroning { background: #F5F3FF; color: #5B21B6; }
-.statusProcessing { background: #DBEAFE; color: #1E40AF; }
-.statusReady { background: #F3E8FF; color: #6B21A8; }
-.statusPickUp { background: #E0F2FE; color: #0369A1; }
-.statusOutForDelivery { background: #FEF9C3; color: #854D0E; }
-.statusDelivered { background: #ECFDF5; color: #065F46; }
-.statusCancelled { background: #F1F5F9; color: #334155; }
+.paidActionBadge {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: #DCFCE7;
+  color: #166534;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.creditActionBadge {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: #FEE2E2;
+  color: #991B1B;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.statusPending { background: #FEF3C7; color: #92400E; } /* Yellow */
+.statusProcessing { background: #E0F2FE; color: #0369A1; } /* Blue */
+.statusIroning { background: #F5F3FF; color: #5B21B6; } /* Purple */
+.statusDelivery { background: #FFEDD5; color: #9A3412; } /* Orange */
+.statusDelivered { background: #DCFCE7; color: #166534; } /* Green */
+.statusCancelled { background: #FEE2E2; color: #991B1B; } /* Red */
 
 /* Modal */
 .modalOverlay {
@@ -531,22 +547,36 @@
   background: #128C7E;
 }
 
-.payBtn {
+.payBtn, .deliverBtn {
   padding: 0.35rem 0.85rem;
   border-radius: 6px;
   border: none;
-  background: #10B981;
-  color: white;
   font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
 }
 
+.payBtn {
+  background: #10B981;
+  color: white;
+}
+
 .payBtn:hover {
   background: #059669;
   transform: translateY(-1px);
   box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+}
+
+.deliverBtn {
+  background: #2563EB;
+  color: white;
+}
+
+.deliverBtn:hover {
+  background: #1D4ED8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
 }
 
 .settleBtn {
@@ -799,6 +829,11 @@
   border-color: #CBD5E1;
 }
 
+@keyframes modalScale {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
 .noData {
   grid-column: 1 / -1;
   text-align: center;
@@ -852,4 +887,25 @@
 .payOption span {
   font-size: 0.9rem;
   font-weight: 600;
+}
+
+.tagBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text-secondary);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tagBtn:hover {
+  background: var(--background);
+  border-color: var(--primary);
+  color: var(--primary);
 }

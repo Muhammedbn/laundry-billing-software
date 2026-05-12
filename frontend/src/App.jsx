@@ -14,14 +14,18 @@ import Reports from './pages/Reports';
 import Expenses from './pages/Expenses';
 import Invoice from './pages/Invoice';
 import Login from './pages/Login';
-import SignUp from './pages/SignUp';
+import Users from './pages/Users';
 import Accounts from './pages/Accounts';
 import Settlement from './pages/Settlement';
+import OutstandingBills from './pages/OutstandingBills';
+import OverdueStatement from './pages/OverdueStatement';
+import HelpCenter from './pages/HelpCenter';
+import Activation from './pages/Activation';
 import { SettingsProvider } from './context/SettingsContext';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = React.useState(
-    localStorage.getItem('isAuthenticated') === 'true'
+    sessionStorage.getItem('isAuthenticated') === 'true'
   );
 
   return (
@@ -29,7 +33,6 @@ function App() {
       <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login onLogin={setIsAuthenticated} />} />
-        <Route path="/signup" element={<SignUp />} />
         <Route 
           path="/*" 
           element={
@@ -52,9 +55,14 @@ function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="expenses" element={<Expenses />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="users" element={<Users />} />
           <Route path="accounts/:type" element={<Accounts />} />
           <Route path="settlement" element={<Settlement />} />
+          <Route path="outstanding-bills" element={<OutstandingBills />} />
           <Route path="invoice/:id" element={<Invoice />} />
+          <Route path="overdue-statement/:customerId" element={<OverdueStatement />} />
+          <Route path="activation" element={<Activation />} />
+          <Route path="help" element={<HelpCenter />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -1,0 +1,259 @@
+.container {
+  padding: 2rem;
+  background: #f8fafc;
+  min-height: 100vh;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.titleArea h1 {
+  font-size: 1.875rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 0.25rem;
+}
+
+.titleArea p {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: white;
+  padding: 0.6rem 1rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  width: 320px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.searchBox input {
+  border: none;
+  outline: none;
+  font-size: 0.875rem;
+  width: 100%;
+  font-weight: 500;
+}
+
+.exportBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.exportBtn:hover {
+  background: #f1f5f9;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.statCard {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.statIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.statInfo span {
+  font-size: 0.875rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.statInfo h3 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-top: 0.125rem;
+}
+
+.filterRow {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.filterBtn {
+  padding: 0.5rem 1.25rem;
+  border-radius: 100px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filterBtn:hover {
+  border-color: #cbd5e1;
+}
+
+.filterBtn.active {
+  background: #0f172a;
+  color: white;
+  border-color: #0f172a;
+}
+
+.tableCard {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  text-align: left;
+  padding: 1rem 1.5rem;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.table td {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.875rem;
+  color: #475569;
+}
+
+.boldText {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.custCell {
+  display: flex;
+  flex-direction: column;
+}
+
+.custName {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.custPhone {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.badgeYellow { background: #FEF3C7; color: #92400E; }
+.badgeRed { background: #FEE2E2; color: #991B1B; }
+
+.amount {
+  font-weight: 600;
+  color: #64748b;
+}
+
+.dueAmount {
+  font-weight: 800;
+  color: #ef4444;
+}
+
+.actionGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.settleBtn {
+  padding: 0.4rem 1rem;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.settleBtn:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.iconBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.iconBtn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.overdueRow {
+  background: #fffafa;
+}
+
+.noData {
+  text-align: center;
+  padding: 4rem !important;
+  color: #94a3b8;
+}

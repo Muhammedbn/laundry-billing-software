@@ -1,0 +1,304 @@
+.container {
+  padding: 2rem;
+  max-width: 1000px;
+  margin: 0 auto;
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+.actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: white;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  color: #64748B;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.backBtn:hover {
+  background: #F8FAFC;
+  color: #1E293B;
+}
+
+.whatsappBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  background: #22C55E;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.whatsappBtn:hover {
+  background: #16A34A;
+  transform: translateY(-1px);
+}
+
+.printBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  background: #2563EB;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.printBtn:hover {
+  background: #1D4ED8;
+  transform: translateY(-1px);
+}
+
+/* Statement Layout */
+.statementCard {
+  background: white;
+  border-radius: 24px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+  padding: 3.5rem;
+  border: 1px solid #F1F5F9;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 3.5rem;
+  border-bottom: 2px solid #F8FAFC;
+  padding-bottom: 2rem;
+}
+
+.shopInfo {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+.shopDetails h2 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0;
+}
+
+.shopDetails p {
+  font-size: 0.9rem;
+  color: #64748B;
+  margin: 0.2rem 0;
+  font-weight: 500;
+}
+
+.titleSection {
+  text-align: right;
+}
+
+.titleSection h1 {
+  font-size: 2rem;
+  font-weight: 900;
+  color: #2563EB;
+  margin: 0;
+  letter-spacing: -1px;
+}
+
+.titleSection p {
+  font-size: 0.95rem;
+  color: #64748B;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+/* Customer & Summary Section */
+.infoGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  margin-bottom: 3rem;
+}
+
+.sectionLabel {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #94A3B8;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 0.75rem;
+}
+
+.customerInfo h3 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #1E293B;
+  margin: 0 0 0.5rem 0;
+}
+
+.customerInfo p {
+  font-size: 0.95rem;
+  color: #64748B;
+  margin: 0.25rem 0;
+  font-weight: 500;
+}
+
+.summaryBox {
+  background: #F8FAFC;
+  border-radius: 20px;
+  padding: 1.5rem;
+  border: 1px solid #F1F5F9;
+}
+
+.summaryRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.summaryRow:last-child {
+  margin-bottom: 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid #E2E8F0;
+}
+
+.summaryRow span {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #64748B;
+}
+
+.summaryRow strong {
+  font-size: 1rem;
+  color: #1E293B;
+}
+
+.totalDueValue {
+  font-size: 1.5rem !important;
+  color: #EF4444 !important;
+  font-weight: 900 !important;
+}
+
+/* Table */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 3rem;
+}
+
+.table th {
+  text-align: left;
+  padding: 1rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #94A3B8;
+  text-transform: uppercase;
+  border-bottom: 2px solid #F1F5F9;
+}
+
+.table td {
+  padding: 1.25rem 1rem;
+  font-size: 0.95rem;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.billId {
+  font-weight: 700;
+  color: #1E293B;
+}
+
+.dueCell {
+  font-weight: 800;
+  color: #EF4444;
+  text-align: right;
+}
+
+.alignRight {
+  text-align: right;
+}
+
+/* Footer */
+.footer {
+  margin-top: 3rem;
+  border-top: 2px solid #F1F5F9;
+  padding-top: 2rem;
+}
+
+.notes {
+  background: #FEF2F2;
+  border-left: 4px solid #EF4444;
+  padding: 1.25rem;
+  border-radius: 0 12px 12px 0;
+  margin-bottom: 2rem;
+}
+
+.notes p {
+  font-size: 0.85rem;
+  color: #991B1B;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.bankSection {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.bankCard {
+  background: #F8FAFC;
+  padding: 1.25rem;
+  border-radius: 16px;
+  border: 1px solid #F1F5F9;
+}
+
+.bankName {
+  display: block;
+  font-weight: 800;
+  color: #1E293B;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.bankDetails {
+  font-size: 0.85rem;
+  color: #64748B;
+  line-height: 1.4;
+}
+
+.watermark {
+  text-align: center;
+  margin-top: 4rem;
+  font-size: 0.75rem;
+  color: #CBD5E1;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+@media print {
+  .actions { display: none; }
+  .container { padding: 0; max-width: 100%; }
+  .statementCard { box-shadow: none; border: none; padding: 0; }
+  body { background: white; }
+}

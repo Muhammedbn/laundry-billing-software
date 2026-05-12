@@ -9,10 +9,9 @@ import {
   Clock, DollarSign, Package, Star, Zap, Droplets, Truck, AlertCircle
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
+import { useNavigate } from 'react-router-dom';
 import CurrencySymbol from '../components/CurrencySymbol';
 import styles from './Reports.module.css';
-
-// Styles and variants remain same
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -30,7 +29,19 @@ const itemVariants = {
 };
 
 export default function Reports() {
+  const navigate = useNavigate();
   const { settings } = useSettings();
+  
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
+  const isAuthorized = user.role === 'super_admin' || user.role === 'manager';
+
+  useEffect(() => {
+    if (!isAuthorized) {
+      navigate('/');
+    }
+  }, [isAuthorized, navigate]);
+
+  if (!isAuthorized) return null;
   const [stats, setStats] = useState({
     totalRevenue: 0,
     orderCount: 0,

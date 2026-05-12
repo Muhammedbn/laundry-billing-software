@@ -150,14 +150,6 @@ export default function Dashboard() {
       </div>
 
       <div className={styles.insightsGrid}>
-        <div className={styles.insightCard}>
-          <div className={styles.insightTag}>Operational Insight</div>
-          <p className={styles.insightText}>
-            Average processing time has decreased by 14 minutes per load this week. Keep up the great pace and ensure all machines are utilized optimally!
-          </p>
-          <div style={{ height: '30px', width: '100%', background: 'rgba(255,255,255,0.1)', borderRadius: '4px' }}></div>
-        </div>
-
         <div className={styles.capacityCard}>
           <h3 className={styles.capacityTitle}>Storage Capacity</h3>
           <div className={styles.capacityItem}>

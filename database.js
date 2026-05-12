@@ -14,6 +14,8 @@ function initDB(appPath) {
       shopId TEXT PRIMARY KEY,
       name TEXT,
       settings JSON,
+      isActivated INTEGER DEFAULT 0,
+      activationDate TEXT,
       isSynced INTEGER DEFAULT 0,
       updatedAt TEXT
     );
@@ -92,6 +94,7 @@ function initDB(appPath) {
       dueAmount REAL DEFAULT 0,
       paymentStatus TEXT DEFAULT 'Paid', -- 'Paid', 'Credit', 'Partial'
       items JSON,
+      statusHistory JSON,
       createdAt TEXT,
       isSynced INTEGER DEFAULT 0,
       updatedAt TEXT
@@ -114,6 +117,9 @@ function initDB(appPath) {
       shopId TEXT,
       title TEXT,
       amount REAL,
+      taxAmount REAL DEFAULT 0,
+      isTaxEnabled INTEGER DEFAULT 0,
+      taxMethod TEXT DEFAULT 'inclusive',
       category TEXT,
       date TEXT,
       isSynced INTEGER DEFAULT 0,
@@ -141,6 +147,25 @@ function initDB(appPath) {
       db.exec("ALTER TABLE services ADD COLUMN taxRate REAL DEFAULT NULL;");
     }
 
+    const shopCols = db.prepare("PRAGMA table_info(shops)").all();
+    if (!shopCols.some(col => col.name === 'isActivated')) {
+      db.exec("ALTER TABLE shops ADD COLUMN isActivated INTEGER DEFAULT 0;");
+    }
+    if (!shopCols.some(col => col.name === 'activationDate')) {
+      db.exec("ALTER TABLE shops ADD COLUMN activationDate TEXT;");
+    }
+
+    // Ensure at least one shop exists with a default 30-day trial
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const expiryDate = thirtyDaysFromNow.toISOString().split('T')[0];
+    const defaultSettings = JSON.stringify({ expiryDate, currencySymbol: 'د.إ' });
+    
+    db.prepare("INSERT OR IGNORE INTO shops (shopId, name, isActivated, settings) VALUES (?, ?, ?, ?)").run('SHOP_01', 'ABC Laundry', 1, defaultSettings);
+
+    // Force activation for now as requested "manualy set"
+    db.exec("UPDATE shops SET isActivated = 1 WHERE isActivated = 0;");
+
     const custCols = db.prepare("PRAGMA table_info(customers)").all();
     if (!custCols.some(col => col.name === 'creditLimit')) {
       db.exec("ALTER TABLE customers ADD COLUMN creditLimit REAL DEFAULT 0;");
@@ -159,6 +184,9 @@ function initDB(appPath) {
     if (!orderCols.some(col => col.name === 'paymentStatus')) {
       db.exec("ALTER TABLE orders ADD COLUMN paymentStatus TEXT DEFAULT 'Paid';");
     }
+    if (!orderCols.some(col => col.name === 'statusHistory')) {
+      db.exec("ALTER TABLE orders ADD COLUMN statusHistory JSON;");
+    }
 
     const payCols = db.prepare("PRAGMA table_info(payments)").all();
     if (!payCols.some(col => col.name === 'customerId')) {
@@ -171,9 +199,19 @@ function initDB(appPath) {
       db.exec("ALTER TABLE payments ADD COLUMN shopId TEXT;");
     }
 
-    const txnCols = db.prepare("PRAGMA table_info(account_transactions)").all();
     if (!txnCols.some(col => col.name === 'icon')) {
       db.exec("ALTER TABLE account_transactions ADD COLUMN icon TEXT DEFAULT 'DollarSign';");
+    }
+
+    const expCols = db.prepare("PRAGMA table_info(expenses)").all();
+    if (!expCols.some(col => col.name === 'taxAmount')) {
+      db.exec("ALTER TABLE expenses ADD COLUMN taxAmount REAL DEFAULT 0;");
+    }
+    if (!expCols.some(col => col.name === 'isTaxEnabled')) {
+      db.exec("ALTER TABLE expenses ADD COLUMN isTaxEnabled INTEGER DEFAULT 0;");
+    }
+    if (!expCols.some(col => col.name === 'taxMethod')) {
+      db.exec("ALTER TABLE expenses ADD COLUMN taxMethod TEXT DEFAULT 'inclusive';");
     }
     // Data Healer: Normalize statuses and fix broken financial records
     console.log("Running Data Healer...");

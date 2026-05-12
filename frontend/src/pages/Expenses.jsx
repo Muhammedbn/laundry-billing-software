@@ -17,8 +17,16 @@ export default function Expenses() {
     amount: '', 
     category: 'Supplies', 
     date: new Date().toISOString().split('T')[0],
-    paymentSource: 'CASH' 
+    paymentSource: 'CASH',
+    isTaxEnabled: false,
+    taxMethod: 'inclusive'
   });
+
+  useEffect(() => {
+    if (settings?.taxMethod) {
+      setFormData(prev => ({ ...prev, taxMethod: settings.taxMethod }));
+    }
+  }, [settings]);
 
   useEffect(() => {
     fetchExpenses();
@@ -52,12 +60,21 @@ export default function Expenses() {
 
   const handleAddExpense = async (e) => {
     e.preventDefault();
-    if (window.electronAPI?.dbQuery) {
       try {
         const id = `EXP-${Date.now()}`;
+        const taxAmount = formData.isTaxEnabled ? (
+          formData.taxMethod === 'inclusive' 
+            ? (parseFloat(formData.amount) - (parseFloat(formData.amount) / (1 + (settings.taxRate / 100))))
+            : (parseFloat(formData.amount) * (settings.taxRate / 100))
+        ) : 0;
+
+        const totalAmount = formData.taxMethod === 'exclusive' && formData.isTaxEnabled
+          ? (parseFloat(formData.amount) + taxAmount)
+          : parseFloat(formData.amount);
+
         await window.electronAPI.dbQuery(
-          'INSERT INTO expenses (id, shopId, title, amount, category, date, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [id, 'SHOP_01', formData.title, parseFloat(formData.amount), formData.category, formData.date, new Date().toISOString()]
+          'INSERT INTO expenses (id, shopId, title, amount, taxAmount, isTaxEnabled, taxMethod, category, date, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [id, 'SHOP_01', formData.title, totalAmount, taxAmount, formData.isTaxEnabled ? 1 : 0, formData.taxMethod, formData.category, formData.date, new Date().toISOString()]
         );
 
         // Also record in Accounts
@@ -67,16 +84,15 @@ export default function Expenses() {
           `INSERT INTO account_transactions 
            (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon) 
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [txnId, 'SHOP_01', formData.paymentSource, 'EXPENSE', formData.category, parseFloat(formData.amount), formData.title, txnTimestamp, 0, new Date().toISOString(), 'Zap']
+          [txnId, 'SHOP_01', formData.paymentSource, 'EXPENSE', formData.category, totalAmount, formData.title, txnTimestamp, 0, new Date().toISOString(), 'Zap']
         );
 
         fetchExpenses();
         setShowModal(false);
-        setFormData({ title: '', amount: '', category: 'Supplies', date: new Date().toISOString().split('T')[0], paymentSource: 'CASH' });
+        setFormData({ title: '', amount: '', category: 'Supplies', date: new Date().toISOString().split('T')[0], paymentSource: 'CASH', isTaxEnabled: false, taxMethod: settings.taxMethod || 'inclusive' });
       } catch (err) {
         console.error("Add expense error:", err);
       }
-    }
   };
   return (
     <div className={styles.expensesPage}>
@@ -138,6 +154,7 @@ export default function Expenses() {
               <th>Category</th>
               <th>Description</th>
               <th>Amount</th>
+              <th>Tax</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -154,6 +171,11 @@ export default function Expenses() {
                 </td>
                 <td className={styles.descriptionCell}>{ex.title}</td>
                 <td className={styles.amountCell}><CurrencySymbol size={14} /> {ex.amount.toFixed(2)}</td>
+                <td style={{ color: '#94A3B8', fontSize: '0.85rem' }}>
+                  {ex.taxAmount > 0 ? (
+                    <><CurrencySymbol size={12} /> {ex.taxAmount.toFixed(2)}</>
+                  ) : '-'}
+                </td>
                 <td>
                   <span className={`${styles.statusBadge} ${styles.paid}`}>
                     PAID
@@ -242,6 +264,71 @@ export default function Expenses() {
                       <option value="BANK">Bank Account</option>
                     </select>
                   </div>
+                </div>
+
+                <div className={styles.taxToggleArea}>
+                   <div className={styles.taxToggle}>
+                      <div className={styles.toggleText}>
+                        <span className={styles.toggleLabel}>Tax / VAT ({settings.taxRate}%)</span>
+                        <span className={styles.toggleSubtext}>Apply {settings.taxName} to this expense</span>
+                      </div>
+                      <label className={styles.switch}>
+                        <input 
+                          type="checkbox" 
+                          checked={formData.isTaxEnabled}
+                          onChange={(e) => setFormData({...formData, isTaxEnabled: e.target.checked})}
+                        />
+                        <span className={`${styles.slider} ${styles.round}`}></span>
+                      </label>
+                   </div>
+                   {formData.isTaxEnabled && (
+                     <>
+                       <div className={styles.taxMethodSelector}>
+                          <button 
+                            type="button"
+                            className={`${styles.methodBtn} ${formData.taxMethod === 'inclusive' ? styles.activeMethod : ''}`}
+                            onClick={() => setFormData({...formData, taxMethod: 'inclusive'})}
+                          >
+                            Tax Inclusive
+                          </button>
+                          <button 
+                            type="button"
+                            className={`${styles.methodBtn} ${formData.taxMethod === 'exclusive' ? styles.activeMethod : ''}`}
+                            onClick={() => setFormData({...formData, taxMethod: 'exclusive'})}
+                          >
+                            Tax Exclusive
+                          </button>
+                       </div>
+
+                       <div className={styles.taxPreview}>
+                          <div className={styles.previewItem}>
+                            <span>Net Amount:</span>
+                            <span><CurrencySymbol size={12} /> {
+                              formData.taxMethod === 'inclusive' 
+                                ? (parseFloat(formData.amount || 0) / (1 + (settings.taxRate / 100))).toFixed(2)
+                                : (parseFloat(formData.amount || 0)).toFixed(2)
+                            }</span>
+                          </div>
+                          <div className={styles.previewItem}>
+                            <span>{settings.taxName} Amount:</span>
+                            <span><CurrencySymbol size={12} /> {
+                              formData.taxMethod === 'inclusive' 
+                                ? (parseFloat(formData.amount || 0) - (parseFloat(formData.amount || 0) / (1 + (settings.taxRate / 100)))).toFixed(2)
+                                : (parseFloat(formData.amount || 0) * (settings.taxRate / 100)).toFixed(2)
+                            }</span>
+                          </div>
+                          <div className={styles.previewDivider}></div>
+                          <div className={styles.previewItem} style={{ fontWeight: 800, color: '#1E293B' }}>
+                            <span>Total Payable:</span>
+                            <span><CurrencySymbol size={12} /> {
+                              formData.taxMethod === 'exclusive'
+                                ? (parseFloat(formData.amount || 0) * (1 + (settings.taxRate / 100))).toFixed(2)
+                                : (parseFloat(formData.amount || 0)).toFixed(2)
+                            }</span>
+                          </div>
+                       </div>
+                     </>
+                   )}
                 </div>
               </div>
               <div className={styles.modalFooter}>

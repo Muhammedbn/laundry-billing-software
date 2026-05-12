@@ -4,7 +4,8 @@ const SettingsContext = createContext();
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState({
-    companyName: 'Loundry Management System',
+    companyName: 'Laundry Management System',
+    shopName: 'Laundry Management System',
     logo: null,
     email: '',
     phone: '',
@@ -22,7 +23,21 @@ export function SettingsProvider({ children }) {
     taxMethod: 'exclusive',
     invoiceTemplate: 'standard',
     waCountryCode: '971',
-    currencySymbol: 'د.إ'
+    currencySymbol: 'د.إ',
+    activationCode: '',
+    expiryDate: '',
+    isActivated: true,
+    activationDate: '',
+    licenseFeatures: {
+      barcode: true,
+      quickItem: true,
+      kot: false,
+      multiUser: true,
+      reports: true,
+      cloudSync: true
+    },
+    bankAccounts: [],
+    defaultBankId: ''
   });
 
   useEffect(() => {
@@ -37,7 +52,7 @@ export function SettingsProvider({ children }) {
           const shop = result.data[0];
           const shopSettings = typeof shop.settings === 'string' ? JSON.parse(shop.settings) : shop.settings;
           setSettings({
-            companyName: shop.name || 'Antigravity Laundry',
+            companyName: shop.name || 'Laundry Management System',
             logo: shopSettings?.logo || null,
             email: shopSettings?.email || '',
             phone: shopSettings?.phone || '',
@@ -55,7 +70,21 @@ export function SettingsProvider({ children }) {
             taxMethod: shopSettings?.taxMethod || 'exclusive',
             invoiceTemplate: shopSettings?.invoiceTemplate || 'standard',
             waCountryCode: shopSettings?.waCountryCode || '971',
-            currencySymbol: shopSettings?.currencySymbol || 'د.إ'
+            currencySymbol: shopSettings?.currencySymbol || 'د.إ',
+            activationCode: shopSettings?.activationCode || '',
+            expiryDate: shopSettings?.expiryDate || '',
+            isActivated: shop.isActivated === 1,
+            activationDate: shop.activationDate || '',
+            licenseFeatures: shopSettings?.licenseFeatures || {
+              barcode: true,
+              quickItem: true,
+              kot: false,
+              multiUser: true,
+              reports: true,
+              cloudSync: true
+            },
+            bankAccounts: shopSettings?.bankAccounts || [],
+            defaultBankId: shopSettings?.defaultBankId || ''
           });
         }
       } catch (err) {
@@ -88,7 +117,12 @@ export function SettingsProvider({ children }) {
           taxMethod: updated.taxMethod,
           invoiceTemplate: updated.invoiceTemplate,
           waCountryCode: updated.waCountryCode,
-          currencySymbol: updated.currencySymbol
+          currencySymbol: updated.currencySymbol,
+          activationCode: updated.activationCode,
+          expiryDate: updated.expiryDate,
+          licenseFeatures: updated.licenseFeatures,
+          bankAccounts: updated.bankAccounts,
+          defaultBankId: updated.defaultBankId
         });
 
         await window.electronAPI.dbQuery(

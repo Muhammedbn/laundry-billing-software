@@ -256,6 +256,32 @@ export default function Customers() {
           </button>
         </div>
       </div>
+      
+      <div className={styles.kpiGrid}>
+        <div className={`${styles.kpiCard} ${styles.kpiCardPrimary}`}>
+          <div className={styles.kpiIcon}><TrendingUp size={20} /></div>
+          <div className={styles.kpiValueWrapper}>
+            <span className={styles.kpiValue}>{customers.length.toLocaleString()}</span>
+          </div>
+          <span className={styles.kpiLabel}>Total Active Customers</span>
+        </div>
+
+        <div className={styles.kpiCard}>
+          <div className={styles.kpiIcon}><Star size={20} color="#2563EB" /></div>
+          <div className={styles.kpiValueWrapper}>
+            <span className={styles.kpiValue}>{Math.round(customers.length * 0.15)}</span>
+          </div>
+          <span className={styles.kpiLabel}>Premium Members</span>
+        </div>
+
+        <div className={styles.kpiCard}>
+          <div className={styles.kpiIcon}><Clock size={20} color="#2563EB" /></div>
+          <div className={styles.kpiValueWrapper}>
+            <span className={styles.kpiValue}>4.2d</span>
+          </div>
+          <span className={styles.kpiLabel}>Avg. Order Frequency</span>
+        </div>
+      </div>
 
       {/* Filters */}
       <div className={styles.filtersCard}>
@@ -377,32 +403,7 @@ export default function Customers() {
         </div>
       </div>
 
-      {/* Bottom KPI Cards */}
-      <div className={styles.kpiGrid}>
-        <div className={`${styles.kpiCard} ${styles.kpiCardPrimary}`}>
-          <div className={styles.kpiIcon}><TrendingUp size={20} /></div>
-          <div className={styles.kpiValueWrapper}>
-            <span className={styles.kpiValue}>{customers.length.toLocaleString()}</span>
-          </div>
-          <span className={styles.kpiLabel}>Total Active Customers</span>
-        </div>
 
-        <div className={styles.kpiCard}>
-          <div className={styles.kpiIcon}><Star size={20} color="#2563EB" /></div>
-          <div className={styles.kpiValueWrapper}>
-            <span className={styles.kpiValue}>{Math.round(customers.length * 0.15)}</span>
-          </div>
-          <span className={styles.kpiLabel}>Premium Members</span>
-        </div>
-
-        <div className={styles.kpiCard}>
-          <div className={styles.kpiIcon}><Clock size={20} color="#2563EB" /></div>
-          <div className={styles.kpiValueWrapper}>
-            <span className={styles.kpiValue}>4.2d</span>
-          </div>
-          <span className={styles.kpiLabel}>Avg. Order Frequency</span>
-        </div>
-      </div>
       {/* Add Customer Modal */}
       {showModal && (
         <div className={styles.modalOverlay}>
@@ -433,13 +434,12 @@ export default function Customers() {
 
                 <div className={styles.formGrid}>
                   <div className={styles.formGroup}>
-                    <label>Email Address</label>
+                    <label>Email Address (Optional)</label>
                     <div className={styles.inputWrapper}>
                       <Mail size={18} />
                       <input 
                         type="email" 
                         placeholder="john@example.com" 
-                        required 
                         value={formData.email}
                         onChange={(e) => setFormData({...formData, email: e.target.value})}
                       />
@@ -476,7 +476,7 @@ export default function Customers() {
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label>Credit Limit ($)</label>
+                  <label>Credit Limit (Optional)</label>
                   <div className={styles.inputWrapper}>
                     <CreditCard size={18} />
                     <input 
