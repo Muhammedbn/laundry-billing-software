@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Search, UserPlus, Download, Calendar, MoreHorizontal, 
-  TrendingUp, Star, Clock, ChevronLeft, ChevronRight, X, Phone, MapPin, MessageCircle, CreditCard, Wallet, DollarSign, Trash2
+  TrendingUp, ChevronLeft, ChevronRight, X, Phone, MapPin, MessageCircle, CreditCard, Wallet, DollarSign, Trash2, Users
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../store/SettingsContext';
@@ -251,6 +251,9 @@ export default function Customers() {
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedCustomers = customers.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
+  const totalReceivables = customers.reduce((sum, c) => sum + (c.balance > 0 ? c.balance : 0), 0);
+  const totalAdvances = customers.reduce((sum, c) => sum + (c.balance < 0 ? Math.abs(c.balance) : 0), 0);
+
   return (
     <div className={styles.customersPage}>
       {/* Header */}
@@ -271,27 +274,31 @@ export default function Customers() {
       
       <div className={styles.kpiGrid}>
         <div className={`${styles.kpiCard} ${styles.kpiCardPrimary}`}>
-          <div className={styles.kpiIcon}><TrendingUp size={20} /></div>
-          <div className={styles.kpiValueWrapper}>
+          <div className={styles.kpiIcon}><Users size={20} /></div>
+          <div className={styles.kpiContent}>
+            <span className={styles.kpiLabel}>Total Customers</span>
             <span className={styles.kpiValue}>{customers.length.toLocaleString()}</span>
           </div>
-          <span className={styles.kpiLabel}>Total Active Customers</span>
         </div>
 
         <div className={styles.kpiCard}>
-          <div className={styles.kpiIcon}><Star size={20} color="#2563EB" /></div>
-          <div className={styles.kpiValueWrapper}>
-            <span className={styles.kpiValue}>{Math.round(customers.length * 0.15)}</span>
+          <div className={`${styles.kpiIcon} ${styles.iconRed}`}><DollarSign size={20} /></div>
+          <div className={styles.kpiContent}>
+            <span className={styles.kpiLabel}>Outstanding Receivables</span>
+            <span className={styles.kpiValue}>
+              <CurrencySymbol size={18} /> {totalReceivables.toFixed(2)}
+            </span>
           </div>
-          <span className={styles.kpiLabel}>Premium Members</span>
         </div>
 
         <div className={styles.kpiCard}>
-          <div className={styles.kpiIcon}><Clock size={20} color="#2563EB" /></div>
-          <div className={styles.kpiValueWrapper}>
-            <span className={styles.kpiValue}>4.2d</span>
+          <div className={`${styles.kpiIcon} ${styles.iconGreen}`}><Wallet size={20} /></div>
+          <div className={styles.kpiContent}>
+            <span className={styles.kpiLabel}>Prepaid Advances</span>
+            <span className={styles.kpiValue}>
+              <CurrencySymbol size={18} /> {totalAdvances.toFixed(2)}
+            </span>
           </div>
-          <span className={styles.kpiLabel}>Avg. Order Frequency</span>
         </div>
       </div>
 
@@ -307,7 +314,35 @@ export default function Customers() {
           />
         </div>
         <div className={styles.filterActions}>
-          <button className={styles.secondaryBtn}><Download size={18} /> Export</button>
+          <button className={styles.secondaryBtn} onClick={() => {
+            const headers = ['Customer ID', 'Name', 'Phone', 'Address', 'Balance', 'Credit Limit', 'Last Updated'];
+            const rows = customers.map(customer => [
+              customer.id,
+              customer.name,
+              customer.phone || '',
+              customer.address || '',
+              (customer.balance || 0).toFixed(2),
+              (customer.creditLimit || 0).toFixed(2),
+              customer.updatedAt || ''
+            ]);
+
+            const csvContent = [
+              headers.join(','),
+              ...rows.map(r => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `customers_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }}>
+            <Download size={18} /> Export
+          </button>
           <button className={styles.secondaryBtn}><Calendar size={18} /> This Month</button>
         </div>
       </div>

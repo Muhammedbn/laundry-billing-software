@@ -18,7 +18,7 @@ export default function Settlement() {
   const queryParams = new URLSearchParams(location.search);
   const initialCustomerId = queryParams.get('customerId');
   
-  const { settings } = useSettings();
+  const { settings, formatDate } = useSettings();
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -453,7 +453,7 @@ export default function Settlement() {
                             <span className={styles.custPhoneSub}>{bill.customerPhone || 'N/A'}</span>
                           </div>
                         </td>
-                        <td>{bill.createdAt ? new Date(bill.createdAt).toLocaleDateString() : 'N/A'}</td>
+                        <td>{bill.createdAt ? formatDate(bill.createdAt) : 'N/A'}</td>
                         <td className={styles.redAmountText}><CurrencySymbol size={11} /> {Number(bill.dueAmount || 0).toFixed(2)}</td>
                         <td>
                           <span className={`${styles.pillBadge} ${styles.pillBadgeRed}`}>Unpaid</span>
@@ -634,9 +634,7 @@ export default function Settlement() {
                       </thead>
                       <tbody>
                         {globalData.pending.map(bill => {
-                          const invoiceDate = new Date(bill.createdAt).toLocaleDateString('en-GB', {
-                            day: '2-digit', month: 'short', year: 'numeric'
-                          });
+                          const invoiceDate = formatDate(bill.createdAt);
                           
                           return (
                             <tr key={bill.id}>
@@ -697,9 +695,7 @@ export default function Settlement() {
                       </thead>
                       <tbody>
                         {globalData.history.map(pay => {
-                          const payDate = new Date(pay.createdAt).toLocaleDateString('en-GB', {
-                            day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                          });
+                          const payDate = formatDate(pay.createdAt);
                           
                           return (
                             <tr key={pay.id}>

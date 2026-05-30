@@ -278,11 +278,12 @@ export default function POS() {
     if (window.electronAPI?.dbQuery) {
       try {
         await window.electronAPI.dbQuery(
-          `INSERT INTO orders (id, shopId, branchId, customerId, status, totalAmount, paidAmount, dueAmount, paymentStatus, items, statusHistory, createdAt, isSynced, updatedAt, paymentMethod) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO orders (id, shopId, billNumber, branchId, customerId, status, totalAmount, paidAmount, dueAmount, paymentStatus, items, statusHistory, createdAt, isSynced, updatedAt, paymentMethod) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             orderId,
             DEFAULT_SHOP_ID,
+            billNumber,
             DEFAULT_BRANCH_ID,
             selectedCustomer ? selectedCustomer.id : 'Walk-in',
             paymentMethod === 'credit' ? ORDER_STATUS.PAYMENT_PENDING : ORDER_STATUS.CONFIRMED,
@@ -389,17 +390,19 @@ export default function POS() {
       try {
         await window.electronAPI.dbQuery(
           `INSERT INTO orders 
-           (id, shopId, branchId, customerId, status, totalAmount, paidAmount, dueAmount, statusHistory, createdAt, updatedAt, paymentStatus, isSynced, paymentMethod) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, shopId, billNumber, branchId, customerId, status, totalAmount, paidAmount, dueAmount, items, statusHistory, createdAt, updatedAt, paymentStatus, isSynced, paymentMethod) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             orderId,
             DEFAULT_SHOP_ID,
+            billNumber,
             DEFAULT_BRANCH_ID,
             selectedCustomer ? selectedCustomer.id : 'Walk-in',
             ORDER_STATUS.PAYMENT_PENDING,
             total,
             0,
             total,
+            JSON.stringify(cart),
             JSON.stringify([{ status: ORDER_STATUS.PAYMENT_PENDING, updatedBy: 'POS System', timestamp: new Date().toISOString() }]),
             new Date().toISOString(),
             new Date().toISOString(),

@@ -4,16 +4,16 @@ import { ArrowLeft, X, Printer, Send, FileText, Tag } from 'lucide-react';
 import { useSettings } from '../store/SettingsContext';
 import InvoiceTemplate from '../components/InvoiceTemplate';
 import DressTag from '../components/DressTag';
-import html2pdf from 'html2pdf.js';
 import styles from './Invoice.module.css';
 
 export default function Invoice() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { settings } = useSettings();
+  const { settings, formatDate } = useSettings();
   const [order, setOrder] = useState(null);
   const [isPrintingTags, setIsPrintingTags] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const invoiceRef = React.useRef();
 
   useEffect(() => {
@@ -34,7 +34,13 @@ export default function Invoice() {
           
           let rawOrder = null;
           for (const variant of idVariations) {
-            const res = await window.electronAPI.dbQuery('SELECT * FROM orders WHERE id = ? OR billNumber = ?', [variant, variant]);
+            const res = await window.electronAPI.dbQuery(
+              `SELECT orders.*, customers.name as customerName, customers.phone as customerPhone 
+               FROM orders 
+               LEFT JOIN customers ON orders.customerId = customers.id 
+               WHERE orders.id = ? OR orders.billNumber = ?`,
+              [variant, variant]
+            );
             if (res.success && res.data.length > 0) {
               rawOrder = res.data[0];
               break;
@@ -69,27 +75,31 @@ export default function Invoice() {
             setOrder({
               id: rawOrder.id,
               billNumber: rawOrder.billNumber || '',
-              date: new Date(rawOrder.createdAt).toLocaleString('en-US', { 
-                month: 'short', 
-                day: 'numeric', 
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-              }),
+              date: formatDate(rawOrder.createdAt),
               createdAt: rawOrder.createdAt,
               customer: rawOrder.customerName || rawOrder.customerId,
+              customerId: rawOrder.customerId,
               customerPhone: rawOrder.customerPhone || '',
               residency: 'Customer Residency',
               status: rawOrder.status,
               paymentStatus: rawOrder.paymentStatus,
-              items: JSON.parse(rawOrder.items || '[]').map(item => ({
-                name: item.name,
-                sub: item.type || 'Standard Treatment',
-                qty: item.qty,
-                price: item.price,
-                total: item.price * item.qty
-              })),
+              items: (() => {
+                let parsed = [];
+                try {
+                  if (rawOrder.items && rawOrder.items !== 'null') {
+                    parsed = JSON.parse(rawOrder.items);
+                  }
+                } catch (e) {
+                  console.error("Failed to parse items:", e);
+                }
+                return Array.isArray(parsed) ? parsed.map(item => ({
+                  name: item.name,
+                  sub: item.type || 'Standard Treatment',
+                  qty: item.qty,
+                  price: item.price,
+                  total: item.price * item.qty
+                })) : [];
+              })(),
               subtotal: subtotal,
               tax: rawOrder.totalAmount - subtotal,
               total: rawOrder.totalAmount,
@@ -146,22 +156,39 @@ export default function Invoice() {
     }
   }, [order, searchParams]);
 
+  // Native Electron PDF — captures pre-rendered invoice HTML for perfect Arabic rendering
   const generatePDF = async () => {
-    const element = invoiceRef.current;
-    const opt = {
-      margin: [10, 10],
-      filename: `Invoice_${order.id}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    try {
-      await html2pdf().set(opt).from(element).save();
+    if (!window.electronAPI?.printToPDF) {
+      window.print();
       return true;
+    }
+    if (!invoiceRef.current) return false;
+
+    setPdfLoading(true);
+    try {
+      const filename = `Invoice_${order.id.replace(/[#/\\:*?"<>|]/g, '')}.pdf`;
+
+      // ── Collect all CSS from the document ──
+      let css = '';
+      for (const sheet of document.styleSheets) {
+        try {
+          const rules = Array.from(sheet.cssRules || []);
+          css += rules.map(r => r.cssText).join('\n') + '\n';
+        } catch (_) {
+          // Cross-origin sheets (Google Fonts etc.) — skip silently
+        }
+      }
+
+      // ── Get the fully-rendered invoice HTML ──
+      const html = invoiceRef.current.outerHTML;
+
+      const result = await window.electronAPI.printToPDF({ filename, html, css });
+      return result.success;
     } catch (err) {
-      console.error("PDF Generation failed:", err);
+      console.error('PDF failed:', err);
       return false;
+    } finally {
+      setPdfLoading(false);
     }
   };
 
@@ -216,8 +243,8 @@ export default function Invoice() {
         </div>
       </div>
 
-      <div ref={invoiceRef} style={{ padding: '2rem' }}>
-        <InvoiceTemplate order={order} settings={settings} />
+      <div ref={invoiceRef}>
+        <InvoiceTemplate order={order} settings={settings} onOrderUpdate={(updated) => setOrder(updated)} />
       </div>
 
       <div className={styles.footerActions} style={{ maxWidth: '800px', margin: '0 auto 2rem auto', padding: '0 2rem' }}>
@@ -227,8 +254,8 @@ export default function Invoice() {
         <button className={styles.printBtn} onClick={handlePrintTags}>
           <Tag size={20} /> Print Garment Tags
         </button>
-        <button className={styles.pdfBtn} onClick={generatePDF}>
-          <FileText size={20} /> Download PDF
+        <button className={styles.pdfBtn} onClick={generatePDF} disabled={pdfLoading}>
+          <FileText size={20} /> {pdfLoading ? 'Generating...' : 'Download PDF'}
         </button>
         <button className={styles.waBtn} onClick={handleWhatsApp}>
           <Send size={20} /> Send via WhatsApp

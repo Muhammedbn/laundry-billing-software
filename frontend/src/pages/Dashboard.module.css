@@ -787,3 +787,16 @@
     grid-template-columns: 1fr;
   }
 }
+
+.boardCardLate {
+  border-color: #fca5a5 !important;
+  background-color: #fef2f2 !important;
+}
+
+.lateTime {
+  color: #ef4444 !important;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}

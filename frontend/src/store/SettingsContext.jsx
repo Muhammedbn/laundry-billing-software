@@ -42,6 +42,7 @@ export function SettingsProvider({ children }) {
     bankAccounts: [],
     defaultBankId: '',
     autoBackupPath: '',
+    autoBackupInterval: 60,
     lastBackupTime: '',
     language: 'English',
     dateFormat: 'DD/MM/YYYY',
@@ -49,7 +50,15 @@ export function SettingsProvider({ children }) {
     autoPrint: false,
     defaultPaymentMethod: 'CASH',
     overdueDays: 7,
-    defaultCreditLimit: 500
+    defaultCreditLimit: 500,
+    lateDeliveryDays: 3,
+    workflowStatuses: ['Confirmed', 'Picked Up', 'Washing', 'Drying', 'Ironing', 'Ready', 'Ready to Pick up', 'Out for Delivery', 'Delivered', 'Cancelled'],
+    invoiceShowLogo: true,
+    invoiceShowQrCode: true,
+    invoiceShowTerms: true,
+    invoiceShowBankDetails: true,
+    invoiceShowBilingual: true,
+    invoiceTermsText: '1. Please present this invoice at the time of pickup.\n2. We are not responsible for color fading or shrinkage.\n3. Orders must be collected within 30 days.'
   });
 
   useEffect(() => {
@@ -100,6 +109,7 @@ export function SettingsProvider({ children }) {
             bankAccounts: shopSettings?.bankAccounts || [],
             defaultBankId: shopSettings?.defaultBankId || '',
             autoBackupPath: shopSettings?.autoBackupPath || '',
+            autoBackupInterval: shopSettings?.autoBackupInterval ?? 60,
             lastBackupTime: shopSettings?.lastBackupTime || '',
             language: shopSettings?.language || 'English',
             dateFormat: shopSettings?.dateFormat || 'DD/MM/YYYY',
@@ -107,7 +117,15 @@ export function SettingsProvider({ children }) {
             autoPrint: shopSettings?.autoPrint ?? false,
             defaultPaymentMethod: shopSettings?.defaultPaymentMethod || 'CASH',
             overdueDays: shopSettings?.overdueDays ?? 7,
-            defaultCreditLimit: shopSettings?.defaultCreditLimit ?? 500
+            defaultCreditLimit: shopSettings?.defaultCreditLimit ?? 500,
+            lateDeliveryDays: shopSettings?.lateDeliveryDays ?? 3,
+            workflowStatuses: shopSettings?.workflowStatuses || ['Confirmed', 'Picked Up', 'Washing', 'Drying', 'Ironing', 'Ready', 'Ready to Pick up', 'Out for Delivery', 'Delivered', 'Cancelled'],
+            invoiceShowLogo: shopSettings?.invoiceShowLogo ?? true,
+            invoiceShowQrCode: shopSettings?.invoiceShowQrCode ?? true,
+            invoiceShowTerms: shopSettings?.invoiceShowTerms ?? true,
+            invoiceShowBankDetails: shopSettings?.invoiceShowBankDetails ?? true,
+            invoiceShowBilingual: shopSettings?.invoiceShowBilingual ?? true,
+            invoiceTermsText: shopSettings?.invoiceTermsText ?? '1. Please present this invoice at the time of pickup.\n2. We are not responsible for color fading or shrinkage.\n3. Orders must be collected within 30 days.'
           });
         }
       } catch (err) {
@@ -149,6 +167,7 @@ export function SettingsProvider({ children }) {
           bankAccounts: updated.bankAccounts,
           defaultBankId: updated.defaultBankId,
           autoBackupPath: updated.autoBackupPath,
+          autoBackupInterval: updated.autoBackupInterval,
           lastBackupTime: updated.lastBackupTime,
           language: updated.language,
           dateFormat: updated.dateFormat,
@@ -156,7 +175,15 @@ export function SettingsProvider({ children }) {
           autoPrint: updated.autoPrint,
           defaultPaymentMethod: updated.defaultPaymentMethod,
           overdueDays: updated.overdueDays,
-          defaultCreditLimit: updated.defaultCreditLimit
+          defaultCreditLimit: updated.defaultCreditLimit,
+          lateDeliveryDays: updated.lateDeliveryDays,
+          workflowStatuses: updated.workflowStatuses,
+          invoiceShowLogo: updated.invoiceShowLogo,
+          invoiceShowQrCode: updated.invoiceShowQrCode,
+          invoiceShowTerms: updated.invoiceShowTerms,
+          invoiceShowBankDetails: updated.invoiceShowBankDetails,
+          invoiceShowBilingual: updated.invoiceShowBilingual,
+          invoiceTermsText: updated.invoiceTermsText
         });
 
         await window.electronAPI.dbQuery(

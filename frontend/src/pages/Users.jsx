@@ -6,11 +6,13 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { DEFAULT_SHOP_ID, API_BASE_URL } from '../constants';
+import { useSettings } from '../store/SettingsContext';
 import styles from './Users.module.css';
 
 const Users = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { formatDate } = useSettings();
   const [searchTerm, setSearchTerm] = useState('');
   const queryTab = new URLSearchParams(location.search).get('tab');
   const [activeTab, setActiveTab] = useState(queryTab === 'roles' ? 'roles' : 'users');
@@ -243,7 +245,7 @@ const Users = () => {
                           Active
                         </span>
                       </td>
-                      <td className={styles.lastActive}>{new Date(user.createdAt).toLocaleDateString()}</td>
+                      <td className={styles.lastActive}>{formatDate(user.createdAt)}</td>
                       <td>
                         <div className={styles.userControl}>
                           {(isSuperAdmin || (isManager && user.role !== 'super_admin')) && (

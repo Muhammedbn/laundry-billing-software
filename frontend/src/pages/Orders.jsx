@@ -36,7 +36,7 @@ export default function Orders({ isPendingView = false }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const querySearch = searchParams.get('search') || '';
-  const { settings } = useSettings();
+  const { settings, formatDate } = useSettings();
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +60,8 @@ export default function Orders({ isPendingView = false }) {
     }
     // Convert to camelCase (e.g. "Ready to Pick up" -> "readyToPickUp", "Picked Up" -> "pickedUp")
     const key = status.charAt(0).toLowerCase() + status.slice(1).replace(/\s+(.)/g, (_, c) => c.toUpperCase());
-    return t(key, settings.language);
+    const translated = t(key, settings.language);
+    return translated === key ? status : translated;
   };
 
   const getPaymentMethodTranslation = (method) => {
@@ -95,7 +96,7 @@ export default function Orders({ isPendingView = false }) {
     if (workflowFilter === 'Confirmed') {
       filteredOrders = filteredOrders.filter(o => ['Confirmed', 'Pending', 'Payment Pending', 'Credit'].includes(o.status));
     } else if (workflowFilter === 'Processing') {
-      filteredOrders = filteredOrders.filter(o => ['Picked Up', 'Washing', 'Drying', 'Ironing'].includes(o.status));
+      filteredOrders = filteredOrders.filter(o => !['Confirmed', 'Pending', 'Payment Pending', 'Credit', 'Ready', 'Ready to Pick up', 'Out for Delivery', 'Delivered', 'Cancelled'].includes(o.status) || ['Picked Up', 'Washing', 'Drying', 'Ironing'].includes(o.status));
     } else if (workflowFilter === 'Ready') {
       filteredOrders = filteredOrders.filter(o => ['Ready', 'Ready to Pick up', 'Out for Delivery'].includes(o.status));
     } else if (workflowFilter === 'Delivered') {
@@ -128,7 +129,7 @@ export default function Orders({ isPendingView = false }) {
   const workflowCounts = {
     All: orders.length,
     Confirmed: orders.filter(o => ['Confirmed', 'Pending', 'Payment Pending', 'Credit'].includes(o.status)).length,
-    Processing: orders.filter(o => ['Picked Up', 'Washing', 'Drying', 'Ironing'].includes(o.status)).length,
+    Processing: orders.filter(o => !['Confirmed', 'Pending', 'Payment Pending', 'Credit', 'Ready', 'Ready to Pick up', 'Out for Delivery', 'Delivered', 'Cancelled'].includes(o.status) || ['Picked Up', 'Washing', 'Drying', 'Ironing'].includes(o.status)).length,
     Ready: orders.filter(o => ['Ready', 'Ready to Pick up', 'Out for Delivery'].includes(o.status)).length,
     Delivered: orders.filter(o => o.status === 'Delivered').length,
     Cancelled: orders.filter(o => o.status === 'Cancelled').length
@@ -278,23 +279,54 @@ export default function Orders({ isPendingView = false }) {
     }
 
     try {
+      let updatedPaidAmount = selectedOrder.paidAmount || 0;
+      let updatedDueAmount = selectedOrder.dueAmount ?? selectedOrder.totalAmount;
+
+      if (newPayStatus === 'Credit' || newPayStatus === 'Pending') {
+        updatedPaidAmount = 0;
+        updatedDueAmount = selectedOrder.totalAmount;
+      } else if (newPayStatus === 'Partial') {
+        if (updatedPaidAmount >= selectedOrder.totalAmount) {
+          updatedPaidAmount = selectedOrder.totalAmount / 2;
+        }
+        updatedDueAmount = selectedOrder.totalAmount - updatedPaidAmount;
+      }
+
       if (window.electronAPI?.dbQuery) {
+        // Update order amounts and payment status
         await window.electronAPI.dbQuery(
-          'UPDATE orders SET paymentStatus = ?, isSynced = 0, updatedAt = ? WHERE id = ?',
-          [newPayStatus, new Date().toISOString(), selectedOrder.id]
+          'UPDATE orders SET paymentStatus = ?, paidAmount = ?, dueAmount = ?, isSynced = 0, updatedAt = ? WHERE id = ?',
+          [newPayStatus, updatedPaidAmount, updatedDueAmount, new Date().toISOString(), selectedOrder.id]
         );
         
-        // If changing to Credit, update customer balance
-        if (newPayStatus === 'Credit' && selectedOrder.customerId) {
-           await window.electronAPI.dbQuery(
-             'UPDATE customers SET balance = balance + ?, isSynced = 0, updatedAt = ? WHERE id = ?',
-             [selectedOrder.dueAmount ?? selectedOrder.totalAmount, new Date().toISOString(), selectedOrder.customerId]
-           );
+        // Revert any linked payments if changed to Credit or Pending
+        if (newPayStatus === 'Credit' || newPayStatus === 'Pending') {
+          await window.electronAPI.dbQuery(
+            'DELETE FROM payments WHERE orderId = ?',
+            [selectedOrder.id]
+          );
+        }
+
+        // Call the healer to automatically reconcile customer balance
+        if (window.electronAPI?.runDataHealer) {
+          await window.electronAPI.runDataHealer();
         }
       }
 
-      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, paymentStatus: newPayStatus } : o));
-      setSelectedOrder(prev => ({ ...prev, paymentStatus: newPayStatus }));
+      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { 
+        ...o, 
+        paymentStatus: newPayStatus, 
+        paidAmount: updatedPaidAmount, 
+        dueAmount: updatedDueAmount 
+      } : o));
+      
+      setSelectedOrder(prev => ({ 
+        ...prev, 
+        paymentStatus: newPayStatus, 
+        paidAmount: updatedPaidAmount, 
+        dueAmount: updatedDueAmount 
+      }));
+
       alert(t('paymentStatusUpdated', settings.language));
     } catch (err) {
       console.error('Failed to update payment status:', err);
@@ -321,6 +353,10 @@ export default function Orders({ isPendingView = false }) {
         ? 'Confirmed'
         : selectedOrder.status;
 
+      const amountToPay = (selectedOrder.dueAmount !== undefined && selectedOrder.dueAmount > 0)
+        ? selectedOrder.dueAmount
+        : selectedOrder.totalAmount;
+
       // 1. Local DB Updates (Perform this FIRST)
       if (window.electronAPI?.dbQuery) {
         // Update Local Order
@@ -329,11 +365,12 @@ export default function Orders({ isPendingView = false }) {
           [nextStatus, 'Paid', selectedOrder.totalAmount, 0, payMethod, new Date().toISOString(), selectedOrder.id]
         );
 
-        // Update Customer Balance if it was Credit/Pending
-        if (['Credit', 'Payment Pending'].includes(selectedOrder.status) && selectedOrder.customerId) {
+        // Update Customer Balance if it was Credit/Pending/Partial
+        const wasUnpaid = selectedOrder.paymentStatus === 'Credit' || selectedOrder.paymentStatus === 'Partial' || (selectedOrder.dueAmount !== undefined && selectedOrder.dueAmount > 0);
+        if (wasUnpaid && selectedOrder.customerId) {
           await window.electronAPI.dbQuery(
             'UPDATE customers SET balance = balance - ?, isSynced = 0, updatedAt = ? WHERE id = ?',
-            [selectedOrder.totalAmount, new Date().toISOString(), selectedOrder.customerId]
+            [amountToPay, new Date().toISOString(), selectedOrder.customerId]
           );
         }
 
@@ -344,8 +381,20 @@ export default function Orders({ isPendingView = false }) {
           `INSERT INTO account_transactions 
            (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon) 
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [txnId, DEFAULT_SHOP_ID, payMethod, 'INCOME', 'Sales Settlement', selectedOrder.totalAmount, `Payment for Order ${selectedOrder.id}`, txnTimestamp, 0, new Date().toISOString(), 'DollarSign']
+          [txnId, DEFAULT_SHOP_ID, payMethod, 'INCOME', 'Sales Settlement', amountToPay, `Payment for Order ${selectedOrder.id}`, txnTimestamp, 0, new Date().toISOString(), 'DollarSign']
         );
+
+        // Record Payment in payments table
+        await window.electronAPI.dbQuery(
+          `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [`PAY-HEAL-${selectedOrder.id}`, selectedOrder.customerId || 'Walk-in', selectedOrder.id, DEFAULT_SHOP_ID, amountToPay, payMethod, 'SUCCESS', new Date().toISOString()]
+        );
+
+        // Call the healer to automatically reconcile customer balance
+        if (window.electronAPI?.runDataHealer) {
+          await window.electronAPI.runDataHealer();
+        }
       }
 
       // 2. Update Local React State immediately
@@ -614,7 +663,7 @@ export default function Orders({ isPendingView = false }) {
                     ) : (
                       <span className={styles.listBadgePending}>{t('pending', settings.language)}</span>
                     )}
-                    <span className={styles.listDate}>{new Date(order.createdAt).toLocaleDateString()}</span>
+                    <span className={styles.listDate}>{formatDate(order.createdAt)}</span>
                   </div>
 
                   <div className={styles.listActionsSection}>
@@ -748,7 +797,7 @@ export default function Orders({ isPendingView = false }) {
                         )}
                       </div>
                     </td>
-                    <td className={styles.dateText}>{new Date(order.createdAt).toLocaleDateString()}</td>
+                    <td className={styles.dateText}>{formatDate(order.createdAt)}</td>
                     <td className={styles.actionsCell}>
                       <div className={styles.actionCellContainer}>
                         <div className={styles.paymentCol}>
@@ -824,7 +873,7 @@ export default function Orders({ isPendingView = false }) {
             <div className={styles.modalHeader}>
               <div>
                 <h2>{t('order', settings.language)} {selectedOrder.orderId || selectedOrder.id}</h2>
-                <p>{t('createdOn', settings.language)} {new Date(selectedOrder.createdAt).toLocaleString()}</p>
+                <p>{t('createdOn', settings.language)} {formatDate(selectedOrder.createdAt)}</p>
               </div>
               <X size={24} className={styles.closeBtn} onClick={() => setSelectedOrder(null)} />
             </div>
@@ -875,7 +924,12 @@ export default function Orders({ isPendingView = false }) {
                         ));
                       })()}
                       <div className={styles.orderTotal}>
-                        <span>{selectedOrder.paymentStatus === 'Paid' ? `${t('totalPaidVia', settings.language)} ${getPaymentMethodTranslation(selectedOrder.paymentMethod || 'CASH')}` : `${t('paymentStatus', settings.language)}: ${t('notPaid', settings.language)}`}</span>
+                        <span>
+                          {selectedOrder.paymentStatus === 'Paid' 
+                            ? `${t('totalPaidVia', settings.language)} ${getPaymentMethodTranslation(selectedOrder.paymentMethod || 'CASH')}` 
+                            : `${t('paymentStatus', settings.language)}: ${t(selectedOrder.paymentStatus?.toLowerCase() || 'notPaid', settings.language)}`
+                          }
+                        </span>
                         <span><CurrencySymbol size={14} /> {(selectedOrder.totalAmount || 0).toFixed(2)}</span>
                       </div>
                     </div>
@@ -898,7 +952,7 @@ export default function Orders({ isPendingView = false }) {
                             <div className={styles.timelineContent}>
                               <p className={styles.timelineStatus}>{translateStatus(h.status) || t('unknown', settings.language)}</p>
                               <p className={styles.timelineMeta}>
-                                {h.updatedBy === 'Admin Staff' ? t('adminStaff', settings.language) : h.updatedBy === 'Staff' ? t('staff', settings.language) : (h.updatedBy || t('staff', settings.language))} • {h.timestamp ? new Date(h.timestamp).toLocaleString() : t('unknown', settings.language)}
+                                {h.updatedBy === 'Admin Staff' ? t('adminStaff', settings.language) : h.updatedBy === 'Staff' ? t('staff', settings.language) : (h.updatedBy || t('staff', settings.language))} • {h.timestamp ? formatDate(h.timestamp) : t('unknown', settings.language)}
                               </p>
                             </div>
                           </div>
@@ -923,16 +977,9 @@ export default function Orders({ isPendingView = false }) {
                         onChange={(e) => handleUpdateStatus(e.target.value)}
                         className={styles.statusSelect}
                       >
-                        <option value="Confirmed">{translateStatus('Confirmed')}</option>
-                        <option value="Picked Up">{translateStatus('Picked Up')}</option>
-                        <option value="Washing">{translateStatus('Washing')}</option>
-                        <option value="Drying">{translateStatus('Drying')}</option>
-                        <option value="Ironing">{translateStatus('Ironing')}</option>
-                        <option value="Ready">{translateStatus('Ready')}</option>
-                        <option value="Ready to Pick up">{translateStatus('Ready to Pick up')}</option>
-                        <option value="Out for Delivery">{translateStatus('Out for Delivery')}</option>
-                        <option value="Delivered">{translateStatus('Delivered')}</option>
-                        <option value="Cancelled">{translateStatus('Cancelled')}</option>
+                        {(settings.workflowStatuses || ['Confirmed', 'Picked Up', 'Washing', 'Drying', 'Ironing', 'Ready', 'Ready to Pick up', 'Out for Delivery', 'Delivered', 'Cancelled']).map((status) => (
+                          <option key={status} value={status}>{translateStatus(status)}</option>
+                        ))}
                       </select>
                       <ChevronDown size={18} />
                     </div>

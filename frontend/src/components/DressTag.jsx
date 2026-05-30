@@ -1,8 +1,10 @@
 import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { useSettings } from '../store/SettingsContext';
 import styles from './DressTag.module.css';
 
 export default function DressTag({ order }) {
+  const { formatDate } = useSettings();
   if (!order || !order.items) return null;
 
   // Flatten items so if there are 3 shirts, we get 3 tags
@@ -40,7 +42,7 @@ export default function DressTag({ order }) {
           </div>
           
           <div className={styles.tagFooter}>
-            <span>{new Date(order.createdAt).toLocaleDateString()}</span>
+            <span>{formatDate(order.createdAt)}</span>
             {tag.addons && tag.addons.length > 0 && (
               <span className={styles.addons}>+ {tag.addons.join(', ')}</span>
             )}

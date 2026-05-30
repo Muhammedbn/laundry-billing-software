@@ -10,7 +10,7 @@ import CurrencySymbol from '../components/CurrencySymbol';
 import styles from './Expenses.module.css';
 
 export default function Expenses() {
-  const { settings } = useSettings();
+  const { settings, formatDate } = useSettings();
   const [expenses, setExpenses] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -320,7 +320,7 @@ export default function Expenses() {
           <tbody>
             {filteredExpenses.length > 0 ? filteredExpenses.map((ex, idx) => (
               <tr key={ex.id || idx}>
-                <td style={{ color: '#64748B', fontWeight: 600 }}>{ex.date}</td>
+                <td style={{ color: '#64748B', fontWeight: 600 }}>{ex.date ? formatDate(ex.date) : '-'}</td>
                 <td>
                   <div className={styles.categoryCell}>
                     <span className={styles.categoryDot} style={{ background: '#3B82F6' }}></span>

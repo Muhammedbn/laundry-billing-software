@@ -8,7 +8,7 @@ import styles from './OverdueStatement.module.css';
 export default function OverdueStatement() {
   const { customerId } = useParams();
   const navigate = useNavigate();
-  const { settings } = useSettings();
+  const { settings, formatDate } = useSettings();
   const [customer, setCustomer] = useState(null);
   const [pendingBills, setPendingBills] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -84,7 +84,7 @@ export default function OverdueStatement() {
           </div>
           <div className={styles.titleSection}>
             <h1>STATEMENT</h1>
-            <p>AS OF {new Date().toLocaleDateString()}</p>
+            <p>AS OF {formatDate(new Date().toISOString())}</p>
           </div>
         </div>
 
@@ -122,7 +122,7 @@ export default function OverdueStatement() {
             {pendingBills.map(bill => (
               <tr key={bill.id}>
                 <td className={styles.billId}>{bill.id}</td>
-                <td>{new Date(bill.createdAt).toLocaleDateString()}</td>
+                <td>{formatDate(bill.createdAt)}</td>
                 <td className={styles.alignRight}><CurrencySymbol size={12} /> {bill.totalAmount.toFixed(2)}</td>
                 <td className={styles.alignRight}><CurrencySymbol size={12} /> {(bill.paidAmount || 0).toFixed(2)}</td>
                 <td className={styles.dueCell}><CurrencySymbol size={14} /> {(bill.dueAmount || (bill.totalAmount - (bill.paidAmount || 0))).toFixed(2)}</td>

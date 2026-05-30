@@ -14,7 +14,7 @@ const API_BASE = 'http://localhost:5000/api';
 
 export default function OutstandingBills() {
   const navigate = useNavigate();
-  const { settings } = useSettings();
+  const { settings, formatDate } = useSettings();
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -78,6 +78,35 @@ export default function OutstandingBills() {
   const totalOutstanding = globalOutstanding || bills.reduce((sum, b) => sum + (b.dueAmount || b.totalAmount || 0), 0);
   const overdueCount = bills.filter(b => isOverdue(b)).length;
 
+  const handleExportCSV = () => {
+    const headers = ['Order ID', 'Bill Number', 'Customer Name', 'Customer Phone', 'Date', 'Status', 'Total Amount', 'Due Amount'];
+    const rows = filteredBills.map(bill => [
+      bill.id,
+      bill.billNumber || '',
+      bill.customerName || 'Walk-in',
+      bill.customerPhone || '',
+      formatDate(bill.createdAt),
+      isOverdue(bill) ? 'Overdue' : 'Pending',
+      (bill.totalAmount || 0).toFixed(2),
+      (bill.dueAmount ?? bill.totalAmount ?? 0).toFixed(2)
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `outstanding_bills_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -95,7 +124,7 @@ export default function OutstandingBills() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <button className={styles.exportBtn}>
+          <button className={styles.exportBtn} onClick={handleExportCSV}>
             <Download size={18} /> Export
           </button>
         </div>
@@ -169,7 +198,7 @@ export default function OutstandingBills() {
                     <span className={styles.custPhone}>{bill.customerPhone}</span>
                   </div>
                 </td>
-                <td>{new Date(bill.createdAt).toLocaleDateString()}</td>
+                <td>{formatDate(bill.createdAt)}</td>
                 <td>
                   <span className={`${styles.badge} ${isOverdue(bill) ? styles.badgeRed : styles.badgeYellow}`}>
                     {isOverdue(bill) ? 'Overdue' : 'Pending'}

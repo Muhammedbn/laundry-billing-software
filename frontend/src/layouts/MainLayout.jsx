@@ -82,16 +82,18 @@ export default function MainLayout() {
     const interval = setInterval(checkStatus, 5000);
     const syncInterval = setInterval(() => { if (isOnline) handleSync(); }, 60000);
 
-    // Dedicated Local Auto-Backup Interval (every 60s, independent of internet)
-    const backupInterval = setInterval(async () => {
-      if (settings.autoBackupPath && window.electronAPI?.silentBackup) {
+    // Dedicated Local Auto-Backup Interval
+    let backupInterval = null;
+    const intervalTime = (settings.autoBackupInterval ?? 60) * 1000;
+    if (settings.autoBackupPath && settings.autoBackupInterval !== 0 && window.electronAPI?.silentBackup) {
+      backupInterval = setInterval(async () => {
         console.log('Auto-backing up to USB...');
         const result = await window.electronAPI.silentBackup(settings.autoBackupPath);
         if (result.success) {
           updateSettings({ lastBackupTime: new Date().toLocaleString() });
         }
-      }
-    }, 60000);
+      }, intervalTime);
+    }
 
     window.addEventListener('online', () => setIsOnline(true));
     window.addEventListener('offline', () => setIsOnline(false));
@@ -99,11 +101,11 @@ export default function MainLayout() {
     return () => {
       clearInterval(interval);
       clearInterval(syncInterval);
-      clearInterval(backupInterval);
+      if (backupInterval) clearInterval(backupInterval);
       window.removeEventListener('online', () => setIsOnline(true));
       window.removeEventListener('offline', () => setIsOnline(false));
     };
-  }, [isOnline]);
+  }, [isOnline, settings.autoBackupPath, settings.autoBackupInterval]);
 
   const handleSync = async () => {
     if (!isOnline || isSyncing) return;

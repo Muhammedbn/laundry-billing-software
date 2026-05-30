@@ -16,7 +16,7 @@ import styles from './Dashboard.module.css';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { settings } = useSettings();
+  const { settings, formatDate } = useSettings();
   const [dateRange, setDateRange] = useState('Today');
   const [loading, setLoading] = useState(true);
   
@@ -41,6 +41,7 @@ export default function Dashboard() {
   const [operationsBoard, setOperationsBoard] = useState({ new: [], processing: [], ready: [], outForDelivery: [] });
   const [recentPayments, setRecentPayments] = useState([]);
   const [topServices, setTopServices] = useState([]);
+  const [footerStats, setFooterStats] = useState({ confirmedCount: 0, totalActive: 0, deliveredCount: 0 });
 
   useEffect(() => {
     fetchDashboardData();
@@ -87,6 +88,16 @@ export default function Dashboard() {
       // 7. Process Top Services
       const servicesRank = calculateTopServices(allOrders);
       setTopServices(servicesRank);
+
+      // 8. Footer: Confirmed Work stats
+      const activeOrders = allOrders.filter(o => !['Cancelled', 'Delivered'].includes(o.status));
+      const confirmedOrders = allOrders.filter(o => o.status === 'Confirmed');
+      const deliveredOrders = allOrders.filter(o => o.status === 'Delivered');
+      setFooterStats({
+        confirmedCount: confirmedOrders.length,
+        totalActive: activeOrders.length,
+        deliveredCount: deliveredOrders.length
+      });
 
     } catch (err) {
       console.error("Dashboard calculation failed:", err);
@@ -249,7 +260,8 @@ export default function Dashboard() {
         id: o.id,
         itemsSummary: getItemsSummary(o.items),
         timeLabel: getTimeAgo(o.createdAt),
-        status: o.status
+        status: o.status,
+        createdAt: o.createdAt
       };
 
       if (['Confirmed', 'Payment Pending', 'Pending'].includes(o.status)) {
@@ -288,7 +300,7 @@ export default function Dashboard() {
     if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
     const diffHours = Math.floor(diffMins / 60);
     if (diffHours < 24) return `${diffHours} hr${diffHours !== 1 ? 's' : ''} ago`;
-    return new Date(dateStr).toLocaleDateString('en-GB');
+    return formatDate(dateStr);
   };
 
   // Payments processing helper
@@ -348,6 +360,21 @@ export default function Dashboard() {
       role = user.role.charAt(0).toUpperCase() + user.role.slice(1).replace('_', ' ');
     }
   } catch (e) {}
+  const getLateOrdersCount = () => {
+    const activeOrders = [
+      ...operationsBoard.new,
+      ...operationsBoard.processing,
+      ...operationsBoard.ready,
+      ...operationsBoard.outForDelivery
+    ];
+    const threshold = settings.lateDeliveryDays || 3;
+    return activeOrders.filter(o => {
+      if (!o.createdAt) return false;
+      const diffMs = new Date() - new Date(o.createdAt);
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+      return diffDays > threshold;
+    }).length;
+  };
 
   return (
     <div className={styles.dashboard}>
@@ -361,7 +388,7 @@ export default function Dashboard() {
         <div className={styles.headerFilters}>
           <div className={styles.datePickerWrapper}>
             <Calendar size={16} color="#64748B" />
-            <span className={styles.dateVal}>{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+            <span className={styles.dateVal}>{formatDate(new Date().toISOString())}</span>
           </div>
           <div className={styles.dateFilter}>
             {['Today', 'Week', 'Month'].map(range => (
@@ -526,6 +553,7 @@ export default function Dashboard() {
               count={operationsBoard.new.length} 
               orders={operationsBoard.new.slice(0, 2)} 
               badgeClass={styles.badgeNew}
+              lateDeliveryDays={settings.lateDeliveryDays || 3}
             />
 
             {/* Processing */}
@@ -534,6 +562,7 @@ export default function Dashboard() {
               count={operationsBoard.processing.length} 
               orders={operationsBoard.processing.slice(0, 2)} 
               badgeClass={styles.badgeProcessing}
+              lateDeliveryDays={settings.lateDeliveryDays || 3}
             />
 
             {/* Ready */}
@@ -542,6 +571,7 @@ export default function Dashboard() {
               count={operationsBoard.ready.length} 
               orders={operationsBoard.ready.slice(0, 2)} 
               badgeClass={styles.badgeReady}
+              lateDeliveryDays={settings.lateDeliveryDays || 3}
             />
 
             {/* Out for Delivery */}
@@ -550,6 +580,7 @@ export default function Dashboard() {
               count={operationsBoard.outForDelivery.length} 
               orders={operationsBoard.outForDelivery.slice(0, 2)} 
               badgeClass={styles.badgeDelivery}
+              lateDeliveryDays={settings.lateDeliveryDays || 3}
             />
 
           </div>
@@ -619,11 +650,16 @@ export default function Dashboard() {
 
       {/* ── Footer Status Row ─────────────────────────────── */}
       <div className={styles.footerRow}>
-        <FooterWidget label="Machines Running" val="4 / 6" icon={<Cpu size={16} />} progress={66} />
-        <FooterWidget label="Steam Iron Busy" val="2 / 4" icon={<Activity size={16} />} progress={50} />
+        <FooterWidget
+          label="Confirmed Work"
+          val={`${footerStats.confirmedCount} / ${footerStats.totalActive}`}
+          icon={<ShieldCheck size={16} />}
+          progress={footerStats.totalActive > 0 ? Math.round((footerStats.confirmedCount / footerStats.totalActive) * 100) : 0}
+        />
+        <FooterWidget label="Delivered Count" val={footerStats.deliveredCount} icon={<CheckCircle size={16} />} />
         <FooterWidget label="Pickup Pending" val={operationsBoard.new.length} icon={<ShoppingBag size={16} />} />
         <FooterWidget label="Delivery Pending" val={operationsBoard.ready.length} icon={<Truck size={16} />} />
-        <FooterWidget label="Late Orders" val={Math.max(0, operationsBoard.processing.filter(o => o.timeLabel.includes('day') || o.timeLabel.includes('hr')).length)} icon={<Clock size={16} />} isWarning={true} />
+        <FooterWidget label="Late Orders" val={getLateOrdersCount()} icon={<Clock size={16} />} isWarning={true} />
       </div>
 
     </div>
@@ -631,7 +667,14 @@ export default function Dashboard() {
 }
 
 // Kanban Column Component
-function BoardColumn({ title, count, orders, badgeClass }) {
+function BoardColumn({ title, count, orders, badgeClass, lateDeliveryDays }) {
+  const isOrderLate = (createdAt) => {
+    if (!createdAt) return false;
+    const diffMs = new Date() - new Date(createdAt);
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    return diffDays > lateDeliveryDays;
+  };
+
   return (
     <div className={styles.boardColumn}>
       <div className={styles.columnHeader}>
@@ -639,20 +682,26 @@ function BoardColumn({ title, count, orders, badgeClass }) {
         <span className={`${styles.columnBadge} ${badgeClass}`}>{count}</span>
       </div>
       <div className={styles.columnItems}>
-        {orders.map(o => (
-          <div key={o.id} className={styles.boardCardItem}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className={styles.boardCardId}>{o.id}</span>
-              <span className={styles.boardCardTime}>{o.timeLabel}</span>
+        {orders.map(o => {
+          const late = isOrderLate(o.createdAt);
+          return (
+            <div key={o.id} className={`${styles.boardCardItem} ${late ? styles.boardCardLate : ''}`}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className={styles.boardCardId}>{o.id}</span>
+                <span className={`${styles.boardCardTime} ${late ? styles.lateTime : ''}`}>
+                  {late && <Clock size={11} style={{ display: 'inline', marginRight: '3px', verticalAlign: 'text-bottom' }} />}
+                  {o.timeLabel}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.35rem' }}>
+                <span className={styles.boardCardSummary}>{o.itemsSummary}</span>
+                {o.status !== 'Pending' && o.status !== 'Confirmed' && o.status !== 'Ready' && (
+                  <span className={styles.boardCardStatus}>{o.status}</span>
+                )}
+              </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.35rem' }}>
-              <span className={styles.boardCardSummary}>{o.itemsSummary}</span>
-              {o.status !== 'Pending' && o.status !== 'Confirmed' && o.status !== 'Ready' && (
-                <span className={styles.boardCardStatus}>{o.status}</span>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
         {count > 2 && (
           <div className={styles.moreLabel}>+ {count - 2} more orders</div>
         )}

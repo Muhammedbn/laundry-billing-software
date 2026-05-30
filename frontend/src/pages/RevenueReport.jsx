@@ -10,7 +10,7 @@ import CurrencySymbol from '../components/CurrencySymbol';
 import styles from './Reports.module.css';
 
 export default function RevenueReport() {
-  const { settings } = useSettings();
+  const { settings, formatDate } = useSettings();
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -75,7 +75,7 @@ export default function RevenueReport() {
   const handleExportCSV = () => {
     const headers = ['Date', 'Order ID', 'Method', 'Amount', 'Status'];
     const rows = filteredPayments.map(p => [
-      new Date(p.createdAt).toLocaleDateString(),
+      formatDate(p.createdAt),
       p.orderId || 'Direct Payment',
       p.method,
       p.amount,
@@ -189,7 +189,7 @@ export default function RevenueReport() {
             {filteredPayments.map((p, i) => (
               <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
                 <td style={{ padding: '1.25rem 1rem', fontSize: '0.9rem', color: '#64748B', fontWeight: 600 }}>
-                  {new Date(p.createdAt).toLocaleDateString()}
+                  {formatDate(p.createdAt)}
                 </td>
                 <td style={{ padding: '1.25rem 1rem', fontWeight: 700, color: '#1E293B' }}>{p.orderId || 'Direct Payment'}</td>
                 <td style={{ padding: '1.25rem 1rem' }}>

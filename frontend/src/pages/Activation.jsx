@@ -12,7 +12,7 @@ import styles from './Activation.module.css';
 
 const Activation = () => {
   const navigate = useNavigate();
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, formatDate } = useSettings();
   
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   const isAuthorized = user.role === 'super_admin' || user.role === 'admin' || user.role === 'manager';
@@ -237,7 +237,7 @@ const Activation = () => {
             </div>
             <div className={styles.statusRow}>
               <span>Expiry Date</span>
-              <p>{expiryDate ? new Date(expiryDate).toLocaleDateString() : 'N/A'}</p>
+              <p>{expiryDate ? formatDate(expiryDate) : 'N/A'}</p>
             </div>
             <div className={styles.statusRow}>
               <span>Remaining Days</span>
@@ -245,7 +245,7 @@ const Activation = () => {
             </div>
             <div className={styles.statusRow}>
               <span>Last Activated</span>
-              <p>{settings.activationDate ? new Date(settings.activationDate).toLocaleString() : 'Never'}</p>
+              <p>{settings.activationDate ? formatDate(settings.activationDate) : 'Never'}</p>
             </div>
 
             <div className={styles.terminalInfo}>

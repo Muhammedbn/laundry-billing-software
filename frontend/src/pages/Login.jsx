@@ -113,7 +113,7 @@ export default function Login({ onLogin }) {
           <div className={styles.visualFooter}>
             <div className={styles.statusIndicator}>
               <div className={styles.pulse}></div>
-              <span>System Core v4.2.0 - Secure</span>
+              <span>System Core v1.0.0 - Secure</span>
             </div>
           </div>
         </div>

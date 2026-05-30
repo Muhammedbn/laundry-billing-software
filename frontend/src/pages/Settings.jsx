@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Upload, CheckCircle, Image as ImageIcon, X, Sliders, Scissors,
   Mail, Phone, Globe, Building2, MapPin, CreditCard, Hash, FileText,
-  Percent, Settings2, Info, Plus, Trash2, Star, DollarSign, Clock, Database, Save, AlertCircle, RefreshCw
+  Percent, Settings2, Info, Plus, Trash2, Star, DollarSign, Clock, Database, Save, AlertCircle, RefreshCw, Lock
 } from 'lucide-react';
 import Cropper from 'react-easy-crop';
 import getCroppedImg from '../utils/cropImage';
@@ -30,7 +30,7 @@ export default function Settings() {
 
   if (!isAuthorized) return null;
 
-  const tabs = ['General', 'Company Info', 'Tax Settings', 'Bill Templates', 'Payment Gateways', 'Maintenance'];
+  const tabs = ['General', 'Order Workflow', 'Company Info', 'Tax Settings', 'Bill Templates', 'Payment Gateways', 'Maintenance'];
 
   // Cropper States
   const [imageToCrop, setImageToCrop] = useState(null);
@@ -39,6 +39,10 @@ export default function Settings() {
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const [isCropping, setIsCropping] = useState(false);
 
+  // Workflow Status States
+  const [newStatusInput, setNewStatusInput] = useState('');
+  const [editingStatusIdx, setEditingStatusIdx] = useState(-1);
+  const [editingStatusVal, setEditingStatusVal] = useState('');
 
   const onCropComplete = (croppedArea, croppedAreaPixels) => {
     setCroppedAreaPixels(croppedAreaPixels);
@@ -64,6 +68,52 @@ export default function Settings() {
       setImageToCrop(null);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleAddWorkflowStatus = () => {
+    if (!newStatusInput.trim()) return;
+    const trimmed = newStatusInput.trim();
+    const currentList = settings.workflowStatuses || [];
+    if (currentList.includes(trimmed)) {
+      alert('Status already exists!');
+      return;
+    }
+    const updatedList = [...currentList, trimmed];
+    updateSettings({ workflowStatuses: updatedList });
+    setNewStatusInput('');
+  };
+
+  const handleEditWorkflowStatus = (index) => {
+    const trimmed = editingStatusVal.trim();
+    if (!trimmed) return;
+    const currentList = settings.workflowStatuses || [];
+    if (currentList[index] === trimmed) {
+      setEditingStatusIdx(-1);
+      return;
+    }
+    const coreStatuses = ['Confirmed', 'Delivered', 'Cancelled'];
+    if (coreStatuses.includes(currentList[index])) {
+      alert('Cannot edit system core statuses!');
+      return;
+    }
+    const updatedList = [...currentList];
+    updatedList[index] = trimmed;
+    updateSettings({ workflowStatuses: updatedList });
+    setEditingStatusIdx(-1);
+  };
+
+  const handleDeleteWorkflowStatus = (index) => {
+    const currentList = settings.workflowStatuses || [];
+    const statusToDelete = currentList[index];
+    const coreStatuses = ['Confirmed', 'Delivered', 'Cancelled'];
+    if (coreStatuses.includes(statusToDelete)) {
+      alert('Cannot delete system core statuses!');
+      return;
+    }
+    if (confirm(`Are you sure you want to delete the status "${statusToDelete}"?`)) {
+      const updatedList = currentList.filter((_, idx) => idx !== index);
+      updateSettings({ workflowStatuses: updatedList });
     }
   };
 
@@ -228,6 +278,94 @@ export default function Settings() {
                         onChange={(e) => updateSettings({ defaultCreditLimit: parseFloat(e.target.value) })}
                       />
                     </div>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Late Delivery Threshold (Days)</label>
+                    <div className={styles.inputWrapper}>
+                      <Clock size={18} color="#94A3B8" />
+                      <input 
+                        type="number" 
+                        className={styles.inputField}
+                        value={settings.lateDeliveryDays || 3}
+                        onChange={(e) => updateSettings({ lateDeliveryDays: parseInt(e.target.value) || 0 })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'Order Workflow' && (
+            <div className={styles.profileContainer}>
+              <div className={styles.card}>
+                <h2 className={styles.cardTitle}>Order Workflow Statuses</h2>
+                <p style={{ fontSize: '0.85rem', color: '#64748B', marginBottom: '1rem' }}>
+                  Configure custom workflow stages for your laundry. Core statuses (Confirmed, Delivered, Cancelled) are required by the system.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                  {(settings.workflowStatuses || []).map((status, idx) => {
+                    const isCore = ['Confirmed', 'Delivered', 'Cancelled'].includes(status);
+                    const isEditing = editingStatusIdx === idx;
+                    return (
+                      <div key={idx} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '0.75rem 1rem',
+                        background: '#F8FAFC',
+                        borderRadius: '10px',
+                        border: '1px solid #E2E8F0'
+                      }}>
+                        {isEditing ? (
+                          <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+                            <input 
+                              type="text" 
+                              className={styles.inputField} 
+                              style={{ flex: 1, padding: '0.4rem 0.75rem', fontSize: '0.9rem' }}
+                              value={editingStatusVal}
+                              onChange={(e) => setEditingStatusVal(e.target.value)}
+                            />
+                            <button className={styles.saveChangesBtn} style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }} onClick={() => handleEditWorkflowStatus(idx)}>Save</button>
+                            <button className={styles.discardBtn} style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }} onClick={() => setEditingStatusIdx(-1)}>Cancel</button>
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1E293B' }}>{status}</span>
+                              {isCore && <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.7rem', color: '#94A3B8', background: '#F1F5F9', padding: '0.15rem 0.4rem', borderRadius: '4px', fontWeight: 700 }}><Lock size={10} /> SYSTEM</span>}
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                              {!isCore && (
+                                <>
+                                  <span className={styles.editBtn} style={{ fontSize: '0.825rem' }} onClick={() => {
+                                    setEditingStatusIdx(idx);
+                                    setEditingStatusVal(status);
+                                  }}>Rename</span>
+                                  <button style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }} onClick={() => handleDeleteWorkflowStatus(idx)}>
+                                    <Trash2 size={16} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '1.25rem' }}>
+                  <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1E293B', marginBottom: '0.5rem' }}>Add New Status</h4>
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <input 
+                      type="text" 
+                      className={styles.inputField} 
+                      placeholder="e.g. Dry Cleaning, Stain Treatment..."
+                      value={newStatusInput}
+                      onChange={(e) => setNewStatusInput(e.target.value)}
+                    />
+                    <button className={styles.saveChangesBtn} style={{ whiteSpace: 'nowrap' }} onClick={handleAddWorkflowStatus}>Add Stage</button>
                   </div>
                 </div>
               </div>
@@ -629,24 +767,181 @@ export default function Settings() {
           )}
 
           {activeTab === 'Bill Templates' && (
-            <div className={styles.card}>
-              <h2 className={styles.cardTitle}>Invoice Style Preview</h2>
-              <div className={styles.templatesGrid} style={{ marginBottom: '2rem' }}>
-                <TemplateCard id="standard" name="Standard" description="Office layout" active={settings.invoiceTemplate === 'standard'} onClick={() => updateSettings({ invoiceTemplate: 'standard' })} />
-                <TemplateCard id="modern" name="Modern" description="Clean layout" active={settings.invoiceTemplate === 'modern'} onClick={() => updateSettings({ invoiceTemplate: 'modern' })} />
-                <TemplateCard id="compact" name="Compact" description="Thermal layout" active={settings.invoiceTemplate === 'compact'} onClick={() => updateSettings({ invoiceTemplate: 'compact' })} />
+            <div className={styles.profileContainer}>
+
+              {/* Template Style Picker */}
+              <div className={styles.card}>
+                <h2 className={styles.cardTitle}>Invoice Layout Style</h2>
+                <p style={{ fontSize: '0.85rem', color: '#64748B', marginBottom: '1.25rem' }}>Choose the overall look of your printed invoice.</p>
+                <div className={styles.templatesGrid} style={{ marginBottom: '1rem' }}>
+                  <TemplateCard id="standard" name="Standard" description="Bilingual office layout" active={settings.invoiceTemplate === 'standard'} onClick={() => updateSettings({ invoiceTemplate: 'standard' })} />
+                  <TemplateCard id="modern"   name="Modern"   description="Clean single-language" active={settings.invoiceTemplate === 'modern'}   onClick={() => updateSettings({ invoiceTemplate: 'modern' })} />
+                  <TemplateCard id="compact"  name="Compact"  description="Thermal / small receipt" active={settings.invoiceTemplate === 'compact'}  onClick={() => updateSettings({ invoiceTemplate: 'compact' })} />
+                </div>
               </div>
 
-              <div className={styles.previewSection}>
-                <h3 style={{ marginBottom: '1rem', fontSize: '0.9rem', color: '#64748B' }}>LIVE PREVIEW</h3>
-                <div className={styles.previewContainer} style={{ background: '#f1f5f9', padding: '2rem', borderRadius: '12px', display: 'flex', justifyContent: 'center' }}>
-                  <div style={{ transform: 'scale(0.8)', transformOrigin: 'top center', width: '100%' }}>
-                    <InvoiceTemplate order={previewOrder} settings={settings} />
+              {/* Visible Elements */}
+              <div className={styles.card}>
+                <h2 className={styles.cardTitle}>Invoice Elements</h2>
+                <p style={{ fontSize: '0.85rem', color: '#64748B', marginBottom: '1.5rem' }}>Toggle which sections appear on printed / downloaded invoices.</p>
+                <div className={styles.formGrid}>
+                  {[
+                    { label: 'Shop Logo',           sub: 'Company logo in header',            key: 'invoiceShowLogo' },
+                    { label: 'Compliance QR Code',  sub: 'Order QR code for tracking',        key: 'invoiceShowQrCode' },
+                    { label: 'Bilingual Text',       sub: 'Headings in English & Arabic',      key: 'invoiceShowBilingual' },
+                    { label: 'Terms & Conditions',   sub: 'Print note at bottom',              key: 'invoiceShowTerms' },
+                    { label: 'Bank Transfer Details',sub: 'Payment bank accounts',             key: 'invoiceShowBankDetails' },
+                  ].map(({ label, sub, key }) => (
+                    <div className={styles.formGroup} key={key}>
+                      <label>{label}</label>
+                      <div className={styles.toggleRow}>
+                        <span className={styles.toggleLabel}>{sub}</span>
+                        <div
+                          className={`${styles.switch} ${settings[key] !== false ? styles.switchOn : ''}`}
+                          onClick={() => updateSettings({ [key]: settings[key] === false })}
+                        >
+                          <div className={styles.switchHandle}></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {settings.invoiceShowTerms !== false && (
+                  <div className={styles.formGroup} style={{ marginTop: '1.5rem' }}>
+                    <label>Terms & Conditions / Invoice Note</label>
+                    <textarea
+                      className={styles.inputField}
+                      style={{ width: '100%', height: '90px', padding: '0.75rem', borderRadius: '10px', border: '1px solid #E2E8F0', outline: 'none', resize: 'vertical', marginTop: '0.5rem', fontSize: '0.875rem', color: '#1E293B', fontFamily: 'inherit' }}
+                      placeholder="Enter terms & conditions to print on invoice..."
+                      value={settings.invoiceTermsText || ''}
+                      onChange={(e) => updateSettings({ invoiceTermsText: e.target.value })}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Content Customization */}
+              <div className={styles.card}>
+                <h2 className={styles.cardTitle}>Content & Text Settings</h2>
+                <p style={{ fontSize: '0.85rem', color: '#64748B', marginBottom: '1.25rem' }}>Customize labels, prefixes, and taglines printed on every invoice.</p>
+                <div className={styles.formGrid}>
+                  <div className={styles.formGroup}>
+                    <label>Document Title</label>
+                    <div className={styles.inputWrapper}>
+                      <FileText size={18} color="#94A3B8" />
+                      <input
+                        type="text"
+                        className={styles.inputField}
+                        placeholder="TAX INVOICE"
+                        value={settings.invoiceDocTitle || ''}
+                        onChange={(e) => updateSettings({ invoiceDocTitle: e.target.value })}
+                      />
+                    </div>
+                    <p style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: '0.3rem' }}>Shown as the big title in the centre of the invoice (default: TAX INVOICE)</p>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Arabic Document Title</label>
+                    <div className={styles.inputWrapper} style={{ direction: 'rtl' }}>
+                      <input
+                        type="text"
+                        className={styles.inputField}
+                        style={{ textAlign: 'right' }}
+                        placeholder="فاتورة ضريبية"
+                        value={settings.invoiceDocTitleAr || ''}
+                        onChange={(e) => updateSettings({ invoiceDocTitleAr: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Invoice Number Prefix</label>
+                    <div className={styles.inputWrapper}>
+                      <Hash size={18} color="#94A3B8" />
+                      <input
+                        type="text"
+                        className={styles.inputField}
+                        placeholder="#AG-"
+                        value={settings.invoicePrefix || ''}
+                        onChange={(e) => updateSettings({ invoicePrefix: e.target.value })}
+                      />
+                    </div>
+                    <p style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: '0.3rem' }}>Prefix shown before the invoice number</p>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Footer Tagline</label>
+                    <div className={styles.inputWrapper}>
+                      <Info size={18} color="#94A3B8" />
+                      <input
+                        type="text"
+                        className={styles.inputField}
+                        placeholder="Thank you for your business!"
+                        value={settings.invoiceFooterTagline || ''}
+                        onChange={(e) => updateSettings({ invoiceFooterTagline: e.target.value })}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
+
+              {/* Style Customization */}
+              <div className={styles.card}>
+                <h2 className={styles.cardTitle}>Style & Appearance</h2>
+                <p style={{ fontSize: '0.85rem', color: '#64748B', marginBottom: '1.25rem' }}>Set the accent colour and text size for the invoice.</p>
+                <div className={styles.formGrid}>
+                  <div className={styles.formGroup}>
+                    <label>Accent / Brand Colour</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <input
+                        type="color"
+                        value={settings.invoiceAccentColor || '#2563EB'}
+                        onChange={(e) => updateSettings({ invoiceAccentColor: e.target.value })}
+                        style={{ width: 44, height: 44, border: 'none', borderRadius: 10, cursor: 'pointer', padding: 2 }}
+                      />
+                      <input
+                        type="text"
+                        className={styles.inputField}
+                        style={{ width: 110 }}
+                        value={settings.invoiceAccentColor || '#2563EB'}
+                        onChange={(e) => updateSettings({ invoiceAccentColor: e.target.value })}
+                        placeholder="#2563EB"
+                      />
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        {['#2563EB','#0F766E','#7C3AED','#DC2626','#D97706','#16A34A','#0F172A'].map(c => (
+                          <button key={c} onClick={() => updateSettings({ invoiceAccentColor: c })}
+                            style={{ width: 24, height: 24, borderRadius: '50%', background: c, border: settings.invoiceAccentColor === c ? '2.5px solid #0F172A' : '2px solid transparent', cursor: 'pointer' }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Invoice Font Size</label>
+                    <select
+                      className={styles.inputField}
+                      value={settings.invoiceFontSize || 'normal'}
+                      onChange={(e) => updateSettings({ invoiceFontSize: e.target.value })}
+                    >
+                      <option value="small">Small (compact, more items fit)</option>
+                      <option value="normal">Normal (default)</option>
+                      <option value="large">Large (easier to read)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Preview */}
+              <div className={styles.card}>
+                <h3 style={{ marginBottom: '1rem', fontSize: '0.9rem', fontWeight: 800, color: '#64748B', letterSpacing: '0.5px' }}>LIVE PREVIEW</h3>
+                <div style={{ background: '#F1F5F9', padding: '2rem', borderRadius: '12px', display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
+                  <div style={{ transform: 'scale(0.72)', transformOrigin: 'top center', width: '140%', marginBottom: '-25%' }}>
+                    <InvoiceTemplate order={previewOrder} settings={settings} isPreview={true} />
+                  </div>
+                </div>
+              </div>
+
             </div>
           )}
+
 
           {activeTab === 'Payment Gateways' && (
             <div className={styles.profileContainer}>
@@ -820,8 +1115,28 @@ export default function Settings() {
                     <div style={{ flex: 1 }}>
                       <h3 style={{ marginBottom: '0.5rem', color: '#1E293B' }}>Automatic USB Backup</h3>
                       <p style={{ color: '#64748B', fontSize: '0.875rem', marginBottom: '1rem' }}>
-                        Set a default folder (e.g., on your USB drive). The system will automatically save a backup there every time you sync or close the app.
+                        Set a default folder (e.g., on your USB drive). The system will automatically save a backup there based on the selected interval.
                       </p>
+                      
+                      {settings.autoBackupPath && (
+                        <div className={styles.formGroup} style={{ marginBottom: '1.25rem', maxWidth: '320px' }}>
+                          <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1E293B', display: 'block', marginBottom: '0.5rem' }}>Auto-Backup Interval</label>
+                          <select 
+                            className={styles.inputField}
+                            value={settings.autoBackupInterval ?? 60}
+                            onChange={(e) => updateSettings({ autoBackupInterval: parseInt(e.target.value) })}
+                          >
+                            <option value={60}>Every 1 Minute</option>
+                            <option value={300}>Every 5 Minutes</option>
+                            <option value={900}>Every 15 Minutes</option>
+                            <option value={1800}>Every 30 Minutes</option>
+                            <option value={3600}>Every 1 Hour</option>
+                            <option value={21600}>Every 6 Hours</option>
+                            <option value={86400}>Daily</option>
+                            <option value={0}>Disabled</option>
+                          </select>
+                        </div>
+                      )}
                       
                       <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                         <button 

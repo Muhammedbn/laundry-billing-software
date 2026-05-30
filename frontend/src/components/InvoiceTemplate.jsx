@@ -1,140 +1,320 @@
-import { QRCodeSVG } from 'qrcode.react';
-import { Activity } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
+import { Activity, GripVertical, Pencil, Check, Plus, Trash2, X } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 import CurrencySymbol from './CurrencySymbol';
 import styles from '../pages/Invoice.module.css';
 
-export default function InvoiceTemplate({ order, settings }) {
+// ── Inline editable cell ──────────────────────────────────────────
+function EditableCell({ value, onChange, type = 'text', align = 'left', className, editing }) {
+  if (!editing) {
+    return <span className={className}>{value}</span>;
+  }
+  return (
+    <input
+      type={type}
+      value={value}
+      min={type === 'number' ? 0 : undefined}
+      step={type === 'number' ? 'any' : undefined}
+      onChange={(e) => onChange(type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        width: '100%',
+        border: '1.5px solid #3B82F6',
+        borderRadius: 6,
+        padding: '0.2rem 0.4rem',
+        fontSize: '0.85rem',
+        fontWeight: 600,
+        outline: 'none',
+        background: '#EFF6FF',
+        textAlign: align,
+        minWidth: type === 'number' ? 60 : 80,
+        boxSizing: 'border-box',
+      }}
+    />
+  );
+}
+
+export default function InvoiceTemplate({ order, settings, isPreview = false, onOrderUpdate }) {
   if (!order) return null;
 
-  const isCompact = settings.invoiceTemplate === 'compact';
+  // ── Edit mode ──
+  const [editMode, setEditMode] = useState(false);
 
-  const translateStatus = (status) => {
-    if (!status) return '';
-    const statusMap = {
-      'confirmed': { en: 'Confirmed', ar: 'مؤكد' },
-      'picked up': { en: 'Picked Up', ar: 'تم الاستلام' },
-      'washing': { en: 'Washing', ar: 'غسيل' },
-      'drying': { en: 'Drying', ar: 'تجفيف' },
-      'ironing': { en: 'Ironing', ar: 'كوي' },
-      'ready': { en: 'Ready', ar: 'جاهز' },
-      'ready to pick up': { en: 'Ready to Pick up', ar: 'جاهز للاستلام' },
-      'out for delivery': { en: 'Out for Delivery', ar: 'خارج للتوصيل' },
-      'delivered': { en: 'Delivered', ar: 'تم التسليم' },
-      'cancelled': { en: 'Cancelled', ar: 'ملغى' },
-      'payment pending': { en: 'Payment Pending', ar: 'المدفوعات المعلقة' },
-      'paid': { en: 'Paid', ar: 'مدفوع' },
-      'credit': { en: 'Credit', ar: 'ذمم' },
-      'partial': { en: 'Partial Paid', ar: 'مدفوع جزئياً' }
-    };
-    const key = status.toLowerCase();
-    const mapped = statusMap[key] || { en: status, ar: status };
-    return `${mapped.en} / ${mapped.ar}`;
+  // ── Items state (drag + edit) ──
+  const [items, setItems] = useState(order.items || []);
+  const dragIndex = useRef(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+
+  // Sync items when order prop changes
+  useEffect(() => {
+    setItems(order.items || []);
+  }, [order.items, order.id]);
+
+  // ── Computed totals from items ──
+  const itemsTotal = items.reduce((s, i) => s + (i.qty * i.price), 0);
+  const taxRate = settings.isTaxEnabled ? (settings.taxRate || 0) / 100 : 0;
+  const computedSubtotal = taxRate > 0 ? itemsTotal / (1 + taxRate) : itemsTotal;
+  const computedTax = itemsTotal - computedSubtotal;
+  const computedTotal = itemsTotal;
+
+  // ── Item edit helpers ──
+  const updateItem = (idx, field, value) => {
+    setItems(prev => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: value };
+      next[idx].total = next[idx].qty * next[idx].price;
+      return next;
+    });
   };
+
+  const deleteItem = (idx) => {
+    setItems(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const addItem = () => {
+    setItems(prev => [
+      ...prev,
+      { name: 'New Item', sub: 'Standard', qty: 1, price: 0, total: 0 }
+    ]);
+  };
+
+  // ── Save manual edits to SQLite ──
+  const handleSaveEdits = async () => {
+    setEditMode(false);
+
+    // Check if items changed
+    const itemsChanged = JSON.stringify(items) !== JSON.stringify(order.items || []);
+    if (!itemsChanged) return;
+
+    if (window.electronAPI?.dbQuery) {
+      try {
+        const timestamp = new Date().toISOString();
+        const oldTotal = order.total || 0;
+        const newTotal = computedTotal;
+        const diff = newTotal - oldTotal;
+
+        // 1. Update order in SQLite
+        await window.electronAPI.dbQuery(
+          `UPDATE orders 
+           SET items = ?, totalAmount = ?, dueAmount = MAX(0, totalAmount - paidAmount), isSynced = 0, updatedAt = ? 
+           WHERE id = ?`,
+          [JSON.stringify(items), newTotal, timestamp, order.id]
+        );
+
+        // 2. If customer exists, update customer balance by the difference
+        if (order.customerId && order.customerId !== 'Walk-in') {
+          await window.electronAPI.dbQuery(
+            'UPDATE customers SET balance = balance + ?, isSynced = 0, updatedAt = ? WHERE id = ?',
+            [diff, timestamp, order.customerId]
+          );
+        }
+
+        // 3. Trigger local update in parent state
+        if (onOrderUpdate) {
+          onOrderUpdate({
+            ...order,
+            items: items,
+            total: newTotal,
+            subtotal: computedSubtotal,
+            tax: computedTax,
+            dueAmount: Math.max(0, newTotal - (order.paidAmount || 0))
+          });
+        }
+      } catch (err) {
+        console.error('Failed to save edited invoice:', err);
+        alert('Failed to save invoice edits: ' + err.message);
+      }
+    }
+  };
+
+  // ── Drag handlers ──
+  const handleDragStart = (e, idx) => {
+    dragIndex.current = idx;
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleDragOver = (e, idx) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(idx);
+  };
+  const handleDrop = (e, idx) => {
+    e.preventDefault();
+    if (dragIndex.current === null || dragIndex.current === idx) return;
+    const reordered = [...items];
+    const [moved] = reordered.splice(dragIndex.current, 1);
+    reordered.splice(idx, 0, moved);
+    setItems(reordered);
+    dragIndex.current = null;
+    setDragOverIndex(null);
+  };
+  const handleDragEnd = () => {
+    dragIndex.current = null;
+    setDragOverIndex(null);
+  };
+
+  const isCompact = settings.invoiceTemplate === 'compact';
+  const showLogo = settings.invoiceShowLogo !== false;
+  const showQrCode = settings.invoiceShowQrCode !== false;
+  const showBilingual = settings.invoiceShowBilingual !== false;
+  const showTerms = settings.invoiceShowTerms !== false;
+  const showBankDetails = settings.invoiceShowBankDetails !== false;
+  const termsText = settings.invoiceTermsText || '';
+
+  // ── Customization settings ──
+  const accentColor = settings.invoiceAccentColor || '#2563EB';
+  const fontSizeMap = { small: '0.82rem', normal: '0.9rem', large: '1rem' };
+  const fontSize = fontSizeMap[settings.invoiceFontSize] || '0.9rem';
+  const docTitle = settings.invoiceDocTitle || 'TAX INVOICE';
+  const docTitleAr = settings.invoiceDocTitleAr || 'فاتورة ضريبية';
+  const footerTagline = settings.invoiceFooterTagline || '';
+
+  const formatLabel = (en, ar) => showBilingual ? `${en} / ${ar}` : en;
 
   const getInvoiceStatus = () => {
     const payStatus = order.paymentStatus?.toLowerCase();
     const isPaid = payStatus === 'paid' || (order.total !== undefined && (order.total - (order.paidAmount || 0)) <= 0);
-    if (isPaid) {
-      return 'Paid';
-    }
-    if (payStatus === 'credit') {
-      return 'Credit';
-    }
-    if (payStatus === 'partial') {
-      return 'Partial';
-    }
+    if (isPaid) return 'Paid';
+    if (payStatus === 'credit') return 'Credit';
+    if (payStatus === 'partial') return 'Partial';
     return order.status;
   };
 
   return (
-    <div className={`${styles.invoiceCard} ${styles[`template_${settings.invoiceTemplate}`]}`}>
-      {/* 1. Header: Bilingual Company Profile & Logo */}
-      <div className={styles.invoiceHeaderBilingual}>
-        {/* Left Side: English Info */}
-        <div className={styles.companySideEn}>
-          {settings.logo ? (
-            <img src={settings.logo} alt="Logo" className={styles.invoiceLogo} />
+    <div
+      className={`${styles.invoiceCard} ${styles[`template_${settings.invoiceTemplate}`]}`}
+      style={{ fontSize, '--invoice-accent': accentColor }}
+    >
+
+      {/* ── Edit Mode Toggle Bar (hidden in preview and on print) ── */}
+      {!isPreview && (
+        <div className={styles.editModeBar} data-noprint="true">
+          {!editMode ? (
+            <button className={styles.editModeBtn} onClick={() => setEditMode(true)}>
+              <Pencil size={14} /> Edit Invoice
+            </button>
           ) : (
-            <div className={styles.logoPlaceholder}>
-              <Activity size={24} />
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.8rem', color: '#3B82F6', fontWeight: 700 }}>
+                ✏️ Edit Mode — Click any cell to edit
+              </span>
+              <button className={styles.editModeDoneBtn} onClick={handleSaveEdits}>
+                <Check size={14} /> Done
+              </button>
+              <button className={styles.editModeCancelBtn} onClick={() => { setItems(order.items || []); setEditMode(false); }}>
+                <X size={14} /> Reset
+              </button>
             </div>
           )}
-          <div className={styles.companyInfoEn}>
-            <h2>{settings.companyName || 'Laundry Shop'}</h2>
-            <p className={styles.companyAddress}>{settings.address || 'Address not set'}</p>
-            {settings.phone && <p className={styles.companyContact}>Tel: {settings.phone}</p>}
-            {settings.email && <p className={styles.companyContact}>Email: {settings.email}</p>}
-          </div>
         </div>
+      )}
 
-        {/* Right Side: Arabic Info (Hidden or stacked in compact view) */}
-        {!isCompact && (
-          <div className={styles.companySideAr} style={{ direction: 'rtl', textAlign: 'right' }}>
-            <h2>{settings.companyNameAr || 'محل غسيل ملابس'}</h2>
-            <p className={styles.companyAddress}>{settings.addressAr || 'العنوان غير محدد'}</p>
-            {settings.phone && <p className={styles.companyContact}>هاتف: {settings.phone}</p>}
-            {settings.email && <p className={styles.companyContact}>البريد: {settings.email}</p>}
+      {/* 1. Header */}
+      {isCompact ? (
+        <div className={styles.compactHeader}>
+          {showLogo && (
+            <div className={styles.compactHeaderLeft}>
+              {settings.logo ? (
+                <img src={settings.logo} alt="Logo" className={styles.invoiceLogoCompact} />
+              ) : (
+                <div className={styles.logoPlaceholderCompact}>
+                  <Activity size={18} />
+                </div>
+              )}
+            </div>
+          )}
+          <div className={styles.companyInfoCompact}>
+            <h2>{settings.companyName || 'Laundry Shop'}</h2>
+            <p>{settings.address || 'Address not set'}</p>
+            {settings.phone && <p>Tel: {settings.phone}</p>}
+            {settings.email && <p>Email: {settings.email}</p>}
+          </div>
+          {showQrCode && (
+            <div className={styles.compactHeaderRight}>
+              <div className={styles.qrWrapperCompact}>
+                <QRCodeCanvas value={`ORDER:${order.id}`} size={55} />
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className={styles.invoiceHeaderBilingual}>
+          <div className={styles.companySideEn}>
+            {showLogo && (
+              settings.logo ? (
+                <img src={settings.logo} alt="Logo" className={styles.invoiceLogo} />
+              ) : (
+                <div className={styles.logoPlaceholder}>
+                  <Activity size={24} />
+                </div>
+              )
+            )}
+            <div className={styles.companyInfoEn}>
+              <h2>{settings.companyName || 'Laundry Shop'}</h2>
+              <p className={styles.companyAddress}>{settings.address || 'Address not set'}</p>
+              {settings.phone && <p className={styles.companyContact}>Tel: {settings.phone}</p>}
+              {settings.email && <p className={styles.companyContact}>Email: {settings.email}</p>}
+            </div>
+          </div>
+          {showBilingual && (
+            <div className={styles.companySideAr} style={{ direction: 'rtl', textAlign: 'right' }}>
+              <h2>{settings.companyNameAr || 'محل غسيل ملابس'}</h2>
+              <p className={styles.companyAddress}>{settings.addressAr || 'العنوان غير محدد'}</p>
+              {settings.phone && <p className={styles.companyContact}>هاتف: {settings.phone}</p>}
+              {settings.email && <p className={styles.companyContact}>البريد: {settings.email}</p>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2. Title & TRN */}
+      <div className={styles.titleAndTrnContainer}>
+        <div className={styles.taxInvoiceTitleBlock}>
+          <div className={styles.dividerLine} style={{ borderColor: accentColor }}></div>
+          <div className={styles.titleTextContainer}>
+            <h1 style={{ color: accentColor }}>{showBilingual ? `${docTitle} / ${docTitleAr}` : docTitle}</h1>
+          </div>
+          <div className={styles.dividerLine} style={{ borderColor: accentColor }}></div>
+        </div>
+        {settings.trn && (
+          <div className={styles.trnCenteredBlock}>
+            <span>{formatLabel('TRN', 'الرقم الضريبي')}: {settings.trn}</span>
           </div>
         )}
       </div>
 
-      {/* 2. Document Title: TAX INVOICE / فاتورة ضريبية */}
-      <div className={styles.taxInvoiceTitleBlock}>
-        <div className={styles.dividerLine}></div>
-        <div className={styles.titleTextContainer}>
-          <h1>TAX INVOICE / فاتورة ضريبية</h1>
-        </div>
-        <div className={styles.dividerLine}></div>
-      </div>
-
-      {/* 3. Invoice Metadata & TRN Registration */}
+      {/* 3. Invoice Metadata */}
       <div className={styles.metaDataBlock}>
         <div className={styles.metaLeftColumn}>
           <div className={styles.metaRow}>
-            <span className={styles.metaLabelEnAr}>Invoice No / رقم الفاتورة:</span>
+            <span className={styles.metaLabelEnAr}>{formatLabel('Invoice No', 'رقم الفاتورة')}:</span>
             <span className={styles.metaValue}>{order.id}</span>
           </div>
           {order.billNumber && (
             <div className={styles.metaRow}>
-              <span className={styles.metaLabelEnAr}>Bill Number / رقم الحساب:</span>
+              <span className={styles.metaLabelEnAr}>{formatLabel('Bill Number', 'رقم الحساب')}:</span>
               <span className={styles.metaValue}>{order.billNumber}</span>
             </div>
           )}
-          <div className={styles.metaRow}>
-            <span className={styles.metaLabelEnAr}>Date & Time / التاريخ والوقت:</span>
-            <span className={styles.metaValue} style={{ fontSize: '0.82rem' }}>{order.date}</span>
-          </div>
         </div>
         <div className={styles.metaRightColumn}>
-          {settings.trn && (
-            <div className={styles.metaRow}>
-              <span className={styles.metaLabelEnAr}>TRN / الرقم الضريبي:</span>
-              <span className={styles.metaValue} style={{ fontWeight: 800 }}>{settings.trn}</span>
-            </div>
-          )}
           <div className={styles.metaRow}>
-            <span className={styles.metaLabelEnAr}>Status / الحالة:</span>
-            <span className={styles.statusValueBadge} style={{
-              background: order.paymentStatus === 'Paid' || order.status?.toUpperCase() === 'DELIVERED' ? '#ECFDF5' : '#FEE2E2',
-              color: order.paymentStatus === 'Paid' || order.status?.toUpperCase() === 'DELIVERED' ? '#10B981' : '#EF4444'
-            }}>
-              {translateStatus(getInvoiceStatus())}
-            </span>
+            <span className={styles.metaLabelEnAr}>{formatLabel('Date & Time', 'التاريخ والوقت')}:</span>
+            <span className={styles.metaValue} style={{ fontSize: '0.82rem' }}>{order.date}</span>
           </div>
         </div>
       </div>
 
-      {/* 4. Customer Details Block */}
+      {/* 4. Customer Details */}
       <div className={styles.customerBlockBilingual}>
-        <h3>CUSTOMER DETAILS / تفاصيل العميل</h3>
+        <h3>{formatLabel('CUSTOMER DETAILS', 'تفاصيل العميل')}</h3>
         <div className={styles.customerGrid}>
           <div className={styles.customerItem}>
-            <span className={styles.customerLabelEn}>Name / الاسم:</span>
+            <span className={styles.customerLabelEn}>{formatLabel('Name', 'الاسم')}:</span>
             <strong className={styles.customerVal}>{order.customer}</strong>
           </div>
           {order.customerPhone && (
             <div className={styles.customerItem}>
-              <span className={styles.customerLabelEn}>Phone / الهاتف:</span>
+              <span className={styles.customerLabelEn}>{formatLabel('Phone', 'الهاتف')}:</span>
               <strong className={styles.customerVal}>{order.customerPhone}</strong>
             </div>
           )}
@@ -145,111 +325,246 @@ export default function InvoiceTemplate({ order, settings }) {
       <table className={styles.itemsTableBilingual}>
         <thead>
           <tr>
-            <th style={{ width: '40%', textAlign: 'left' }}>
+            <th style={{ width: '5%' }}></th>
+            <th style={{ width: editMode ? '34%' : '38%', textAlign: 'left' }}>
               <div>ITEM DESCRIPTION</div>
-              <div className={styles.thAr}>وصف الصنف</div>
+              {showBilingual && <div className={styles.thAr}>وصف الصنف</div>}
             </th>
-            <th style={{ width: '20%', textAlign: 'left' }}>
+            <th style={{ width: '18%', textAlign: 'left' }}>
               <div>SERVICE</div>
-              <div className={styles.thAr}>نوع الخدمة</div>
+              {showBilingual && <div className={styles.thAr}>نوع الخدمة</div>}
             </th>
             <th style={{ width: '10%', textAlign: 'center' }}>
               <div>QTY</div>
-              <div className={styles.thAr}>الكمية</div>
+              {showBilingual && <div className={styles.thAr}>الكمية</div>}
             </th>
-            <th style={{ width: '15%', textAlign: 'center' }}>
+            <th style={{ width: '14%', textAlign: 'center' }}>
               <div>PRICE</div>
-              <div className={styles.thAr}>السعر</div>
+              {showBilingual && <div className={styles.thAr}>السعر</div>}
             </th>
             <th style={{ width: '15%', textAlign: 'right' }}>
               <div>TOTAL</div>
-              <div className={styles.thAr}>الإجمالي</div>
+              {showBilingual && <div className={styles.thAr}>الإجمالي</div>}
             </th>
+            {editMode && <th style={{ width: '4%' }} data-noprint="true"></th>}
           </tr>
         </thead>
         <tbody>
-          {order.items.map((item, idx) => (
-            <tr key={idx}>
-              <td>
-                <span className={styles.itemName}>{item.name}</span>
+          {items.map((item, idx) => (
+            <tr
+              key={idx}
+              draggable
+              onDragStart={(e) => handleDragStart(e, idx)}
+              onDragOver={(e) => handleDragOver(e, idx)}
+              onDrop={(e) => handleDrop(e, idx)}
+              onDragEnd={handleDragEnd}
+              style={{
+                background: dragOverIndex === idx ? 'rgba(59,130,246,0.08)' : 'transparent',
+                borderTop: dragOverIndex === idx ? '2px solid #3B82F6' : undefined,
+                cursor: editMode ? 'default' : 'grab',
+                transition: 'background 0.15s'
+              }}
+            >
+              {/* Grip handle */}
+              <td style={{ textAlign: 'center', padding: '0.4rem 0.2rem', color: '#CBD5E1' }}>
+                <GripVertical size={14} style={{ cursor: 'grab' }} />
               </td>
+
+              {/* Name */}
               <td>
-                <span className={styles.itemServiceType}>{item.sub}</span>
+                <EditableCell
+                  editing={editMode}
+                  value={item.name}
+                  onChange={(v) => updateItem(idx, 'name', v)}
+                  className={styles.itemName}
+                />
               </td>
-              <td style={{ textAlign: 'center' }} className={styles.cellValue}>{item.qty}</td>
+
+              {/* Service type */}
+              <td>
+                <EditableCell
+                  editing={editMode}
+                  value={item.sub}
+                  onChange={(v) => updateItem(idx, 'sub', v)}
+                  className={styles.itemServiceType}
+                />
+              </td>
+
+              {/* Qty */}
               <td style={{ textAlign: 'center' }} className={styles.cellValue}>
-                <CurrencySymbol size={11} /> {item.price.toFixed(2)}
+                <EditableCell
+                  editing={editMode}
+                  value={item.qty}
+                  onChange={(v) => updateItem(idx, 'qty', v)}
+                  type="number"
+                  align="center"
+                />
               </td>
+
+              {/* Price */}
+              <td style={{ textAlign: 'center' }} className={styles.cellValue}>
+                {editMode ? (
+                  <EditableCell
+                    editing={editMode}
+                    value={item.price}
+                    onChange={(v) => updateItem(idx, 'price', v)}
+                    type="number"
+                    align="center"
+                  />
+                ) : (
+                  <><CurrencySymbol size={11} /> {item.price.toFixed(2)}</>
+                )}
+              </td>
+
+              {/* Total (auto-calculated) */}
               <td style={{ textAlign: 'right' }} className={styles.cellTotal}>
-                <CurrencySymbol size={11} /> {item.total.toFixed(2)}
+                <CurrencySymbol size={11} /> {(item.qty * item.price).toFixed(2)}
               </td>
+
+              {/* Delete row button (edit mode only) */}
+              {editMode && (
+                <td data-noprint="true" style={{ textAlign: 'center', padding: '0.2rem' }}>
+                  <button
+                    onClick={() => deleteItem(idx)}
+                    style={{
+                      background: '#FEF2F2',
+                      border: '1px solid #FCA5A5',
+                      borderRadius: 6,
+                      color: '#EF4444',
+                      cursor: 'pointer',
+                      padding: '0.2rem 0.35rem',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
       </table>
 
+      {/* Add row button (edit mode only) */}
+      {editMode && (
+        <button
+          data-noprint="true"
+          onClick={addItem}
+          className={styles.addItemRowBtn}
+        >
+          <Plus size={15} /> Add Item Row
+        </button>
+      )}
+
       {/* 6. Totals, Terms, Bank, QR Code */}
       <div className={styles.bottomBilingualSection}>
-        {/* Left column: QR code tracking */}
-        <div className={styles.trackingAndBankDetails}>
-          <div className={styles.complianceQrBox}>
-            <div className={styles.qrWrapper}>
-              <QRCodeSVG value={`ORDER:${order.id}`} size={85} />
-            </div>
-            <div className={styles.qrDetails}>
-              <h4>Track Progress / تتبع الطلب</h4>
-              <p>Scan to check cleaning status.</p>
-              <p className={styles.arText}>امسح الرمز لتتبع حالة الغسيل.</p>
-            </div>
+        {!isCompact && (showQrCode || (showBankDetails && settings.bankAccounts && settings.bankAccounts.length > 0)) && (
+          <div className={styles.trackingAndBankDetails}>
+            {showQrCode && (
+              <div className={styles.complianceQrBox}>
+                <div className={styles.qrWrapper}>
+                  <QRCodeCanvas value={`ORDER:${order.id}`} size={85} />
+                </div>
+              </div>
+            )}
+            {showBankDetails && settings.bankAccounts && settings.bankAccounts.length > 0 && (
+              <div className={styles.bankTransferDetailsBox}>
+                <h4>BANK TRANSFER DETAILS</h4>
+                {settings.bankAccounts.map((account, idx) => (
+                  <div
+                    key={account.id || idx}
+                    className={`${styles.bankAccountRow} ${settings.defaultBankId === account.id ? styles.defaultBankRow : ''}`}
+                  >
+                    <div className={styles.bankName}>
+                      {account.bankName}
+                      {settings.defaultBankId === account.id && <span className={styles.defaultBankBadge}>Default</span>}
+                    </div>
+                    <div className={styles.bankNumbers}>
+                      <span>A/C: {account.accountNumber}</span>
+                      {account.iban && <span>IBAN: {account.iban}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
-        {/* Right column: Totals summary */}
+        {/* Totals summary — auto-recalculated when editing */}
         <div className={styles.totalsBilingualBox}>
-          {/* Card 1: Invoice calculation */}
           <div className={styles.totalsSubCard}>
             <div className={styles.totalsSubCardHeader}>
               <span>INVOICE CHARGES</span>
-              <span>رسوم الفاتورة</span>
+              {showBilingual && <span>رسوم الفاتورة</span>}
             </div>
             <div className={styles.totalRowBilingual}>
-              <span>Before VAT / قبل الضريبة</span>
-              <span className={styles.totalVal}><CurrencySymbol size={11} /> {order.subtotal.toFixed(2)}</span>
+              <span>{formatLabel('Before VAT', 'قبل الضريبة')}</span>
+              <span className={styles.totalVal}><CurrencySymbol size={11} /> {computedSubtotal.toFixed(2)}</span>
             </div>
             <div className={styles.totalRowBilingual}>
-              <span>VAT ({settings.isTaxEnabled ? settings.taxRate : 0}%) / الضريبة</span>
-              <span className={styles.totalVal}><CurrencySymbol size={11} /> {order.tax.toFixed(2)}</span>
+              <span>{formatLabel(`VAT (${settings.isTaxEnabled ? settings.taxRate : 0}%)`, 'الضريبة')}</span>
+              <span className={styles.totalVal}><CurrencySymbol size={11} /> {computedTax.toFixed(2)}</span>
             </div>
             <div className={`${styles.totalRowBilingual} ${styles.highlightRow}`}>
-              <span>Total (Inc. VAT) / الإجمالي شامل الضريبة</span>
-              <span className={styles.totalVal}><CurrencySymbol size={11} /> {order.total.toFixed(2)}</span>
+              <span>{formatLabel('Total (Inc. VAT)', 'الإجمالي شامل الضريبة')}</span>
+              <span className={styles.totalVal}><CurrencySymbol size={11} /> {computedTotal.toFixed(2)}</span>
             </div>
           </div>
 
-          {/* Card 2: Account Statement balance */}
           <div className={styles.totalsSubCard}>
             <div className={styles.totalsSubCardHeader}>
               <span>ACCOUNT STATEMENT</span>
-              <span>كشف الحساب</span>
+              {showBilingual && <span>كشف الحساب</span>}
             </div>
             <div className={styles.totalRowBilingual}>
-              <span>Total Paid / المبلغ المدفوع</span>
+              <span>{formatLabel('Total Paid', 'المبلغ المدفوع')}</span>
               <span className={styles.totalVal}><CurrencySymbol size={11} /> {(order.paidAmount || 0).toFixed(2)}</span>
             </div>
             <div className={styles.totalRowBilingual}>
-              <span>Previous Balance / الرصيد السابق</span>
+              <span>{formatLabel('Previous Balance', 'الرصيد السابق')}</span>
               <span className={styles.totalVal}><CurrencySymbol size={11} /> {(order.previousBalance || 0).toFixed(2)}</span>
             </div>
             <div className={`${styles.grandTotalBilingualRow} ${order.totalBalance > 0 ? styles.balanceOverdue : styles.balancePaid}`}>
               <div className={styles.grandLabelCol}>
                 <span className={styles.grandLabelEn}>Total Balance</span>
-                <span className={styles.grandLabelAr}>الرصيد الإجمالي</span>
+                {showBilingual && <span className={styles.grandLabelAr}>الرصيد الإجمالي</span>}
               </div>
               <span className={styles.grandVal}><CurrencySymbol size={14} /> {(order.totalBalance || 0).toFixed(2)}</span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Bank Details for Compact */}
+      {isCompact && showBankDetails && settings.bankAccounts && settings.bankAccounts.length > 0 && (
+        <div className={styles.bankDetailsCompact}>
+          <div className={styles.bankDetailsTitleCompact}>BANK TRANSFER DETAILS</div>
+          {settings.bankAccounts.map((account, idx) => (
+            <div key={account.id || idx} className={styles.bankAccountRowCompact}>
+              <strong>{account.bankName}</strong>: {account.accountNumber}
+              {account.iban && <span style={{ display: 'block', fontSize: '0.7rem', color: '#64748B' }}>IBAN: {account.iban}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Footer Tagline */}
+      {footerTagline && (
+        <div style={{ textAlign: 'center', padding: '0.75rem 0 0.25rem', fontSize: '0.82rem', color: accentColor, fontWeight: 700 }}>
+          {footerTagline}
+        </div>
+      )}
+
+      {/* Terms & Conditions */}
+      {showTerms && termsText && (
+        <div className={styles.invoiceTermsBox}>
+          <div className={styles.termsHeader}>
+            {formatLabel('TERMS & CONDITIONS', 'الشروط والأحكام')}
+          </div>
+          <p className={styles.termsTextContent}>{termsText}</p>
+        </div>
+      )}
     </div>
   );
 }

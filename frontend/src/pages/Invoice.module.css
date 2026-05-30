@@ -43,10 +43,10 @@
   background: white;
   border-radius: 20px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-  padding: 3rem;
+  padding: 2.25rem;
   display: flex;
   flex-direction: column;
-  gap: 3rem;
+  gap: 1.5rem;
   max-width: 900px;
   margin: 0 auto;
 }
@@ -290,9 +290,11 @@
 }
 
 .invoiceLogo {
-  width: 100%;
-  height: 100%;
+  width: 60px;
+  height: 60px;
   object-fit: contain;
+  border-radius: 12px;
+  flex-shrink: 0;
 }
 
 /* Template: Modern */
@@ -317,6 +319,7 @@
   padding: 1rem;
   box-shadow: none;
   border: 1px dashed #E2E8F0;
+  gap: 0.75rem;
 }
 
 .template_compact .invoiceHeader {
@@ -392,8 +395,8 @@
 }
 
 .logoPlaceholder {
-  width: 48px;
-  height: 48px;
+  width: 60px;
+  height: 60px;
   background: #EFF6FF;
   border-radius: 12px;
   display: flex;
@@ -427,11 +430,18 @@
   margin: 0 0 0.4rem;
 }
 
+.titleAndTrnContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  margin: 0.25rem 0;
+}
+
 .taxInvoiceTitleBlock {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin: 2rem 0;
   width: 100%;
 }
 
@@ -449,18 +459,27 @@
   text-align: center;
 }
 
+.trnCenteredBlock {
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #0F172A;
+  letter-spacing: 0.5px;
+}
+
 .metaDataBlock {
   background: #F8FAFC;
   border-radius: 12px;
   border: 1px solid #E2E8F0;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1.25rem;
   width: 100%;
   display: flex;
   justify-content: space-between;
-  gap: 2rem;
+  gap: 1.25rem;
 }
 
 .metaLeftColumn,
+.metaMiddleColumn,
 .metaRightColumn {
   display: flex;
   flex-direction: column;
@@ -506,7 +525,7 @@
   background: white;
   border: 1px solid #E2E8F0;
   border-radius: 12px;
-  padding: 1.25rem;
+  padding: 0.75rem 1.25rem;
   width: 100%;
 }
 
@@ -547,7 +566,7 @@
 .itemsTableBilingual {
   width: 100%;
   border-collapse: collapse;
-  margin: 1.5rem 0;
+  margin: 0.25rem 0;
 }
 
 .itemsTableBilingual th {
@@ -566,7 +585,7 @@
 }
 
 .itemsTableBilingual td {
-  padding: 1rem 0.5rem;
+  padding: 0.7rem 0.5rem;
   border-bottom: 1px solid #F1F5F9;
 }
 
@@ -580,26 +599,28 @@
 }
 
 .bottomBilingualSection {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr;
-  gap: 2rem;
+  display: flex;
+  gap: 1.25rem;
+  align-items: stretch;
   width: 100%;
 }
 
 .trackingAndBankDetails {
   display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
+  align-items: stretch;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .complianceQrBox {
   background: #F8FAFC;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid #E2E8F0;
-  padding: 1rem;
+  padding: 0.85rem;
   display: flex;
-  gap: 1rem;
   align-items: center;
+  justify-content: center;
+  height: 100%;
 }
 
 .qrWrapper {
@@ -655,8 +676,9 @@
 
 .totalsBilingualBox {
   display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
+  flex-direction: row;
+  gap: 1.25rem;
+  flex: 1;
 }
 
 .totalsSubCard {
@@ -667,6 +689,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  flex: 1;
 }
 
 .totalsSubCardHeader {
@@ -749,31 +772,110 @@
 }
 
 /* Compact overrides */
-.template_compact .invoiceHeaderBilingual {
-  flex-direction: column;
+.compactHeader {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  text-align: center;
+  width: 100%;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px dashed #E2E8F0;
 }
 
-.template_compact .companySideEn {
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
+.compactHeaderLeft {
+  width: 60px;
+  display: flex;
+  justify-content: flex-start;
+  flex-shrink: 0;
 }
 
-.template_compact .companyInfoEn h2 {
+.compactHeaderRight {
+  width: 60px;
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.invoiceLogoCompact {
+  max-height: 45px;
+  max-width: 60px;
+  object-fit: contain;
+}
+
+.logoPlaceholderCompact {
+  width: 40px;
+  height: 40px;
+  background: #EFF6FF;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2563EB;
+}
+
+.qrWrapperCompact {
+  background: white;
+  border-radius: 4px;
+  padding: 0.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #E2E8F0;
+}
+
+.companyInfoCompact {
+  flex: 1;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.companyInfoCompact h2 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0 0 0.15rem 0;
+}
+
+.companyInfoCompact p {
+  font-size: 0.7rem;
+  color: #64748B;
+  margin: 0 0 0.1rem 0;
+  line-height: 1.25;
 }
 
 .template_compact .metaDataBlock {
   flex-direction: column;
   gap: 0.6rem;
   padding: 0.85rem;
+  align-items: center;
+}
+
+.template_compact .metaRow {
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.template_compact .customerBlockBilingual {
+  text-align: center;
+}
+
+.template_compact .customerBlockBilingual h3 {
+  text-align: center;
 }
 
 .template_compact .customerGrid {
   flex-direction: column;
+  align-items: center;
   gap: 0.4rem;
+}
+
+.template_compact .customerItem {
+  justify-content: center;
+  width: 100%;
 }
 
 .template_compact .itemsTableBilingual th div:last-child {
@@ -781,11 +883,230 @@
 }
 
 .template_compact .bottomBilingualSection {
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.template_compact .totalsBilingualBox {
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Bank Transfer details styling */
+.bankTransferDetailsBox {
+  margin-top: 1rem;
+  padding: 0.85rem;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  width: 100%;
+}
+
+.bankTransferDetailsBox h4 {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #475569;
+  letter-spacing: 0.5px;
+  margin: 0 0 0.5rem 0;
+  border-bottom: 1px solid #E2E8F0;
+  padding-bottom: 0.25rem;
+}
+
+.bankAccountRow {
+  padding: 0.4rem 0;
+  border-bottom: 1px dashed #F1F5F9;
+}
+
+.bankAccountRow:last-child {
+  border-bottom: none;
+}
+
+.bankName {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1E293B;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.defaultBankBadge {
+  background: #FEF3C7;
+  color: #D97706;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.bankNumbers {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.75rem;
+  color: #64748B;
+  font-family: monospace;
+  margin-top: 2px;
+}
+
+.defaultBankRow {
+  background: #FFFBEB;
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  margin: 2px -0.5rem;
+}
+
+/* Compact layout bank transfer details styling */
+.bankDetailsCompact {
+  margin-top: 0.75rem;
+  border-top: 1px dashed #CBD5E1;
+  padding-top: 0.5rem;
+}
+
+.bankDetailsTitleCompact {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #475569;
+  margin-bottom: 0.25rem;
+  text-align: center;
+}
+
+.bankAccountRowCompact {
+  font-size: 0.68rem;
+  color: #1E293B;
+  margin-bottom: 0.2rem;
+  text-align: center;
+}
+
+/* Terms and Conditions Box styling */
+.invoiceTermsBox {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border-top: 1px solid #E2E8F0;
+  width: 100%;
+}
+
+.termsHeader {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #475569;
+  margin-bottom: 0.4rem;
+}
+
+.termsTextContent {
+  font-size: 0.7rem;
+  color: #64748B;
+  line-height: 1.4;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.template_compact .invoiceTermsBox {
+  border-top: 1px dashed #CBD5E1;
+  padding-top: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.template_compact .termsHeader {
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.template_compact .termsTextContent {
+  font-size: 0.65rem;
+  text-align: center;
+}
+
+/* ── Edit Mode Bar ── */
+.editModeBar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #F0F9FF;
+  border: 1.5px dashed #93C5FD;
+  border-radius: 10px;
+  margin-bottom: 0.5rem;
+}
+
+.editModeBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: white;
+  border: 1.5px solid #3B82F6;
+  color: #3B82F6;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.35rem 0.85rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.editModeBtn:hover {
+  background: #EFF6FF;
+}
+
+.editModeDoneBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #10B981;
+  border: none;
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.35rem 0.85rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.editModeDoneBtn:hover { background: #059669; }
+
+.editModeCancelBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: white;
+  border: 1.5px solid #E2E8F0;
+  color: #64748B;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.35rem 0.85rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.editModeCancelBtn:hover { background: #F8FAFC; }
+
+.addItemRowBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #F0FDF4;
+  border: 1.5px dashed #86EFAC;
+  color: #16A34A;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  justify-content: center;
+  transition: all 0.15s;
+  margin-top: 0.25rem;
+}
+.addItemRowBtn:hover {
+  background: #DCFCE7;
 }
 
 @media print {
+  @page {
+    size: 148mm 210mm;   /* Exact A5: Width 148mm × Height 210mm */
+    margin: 8mm;
+  }
 
   .topBar,
   .footerActions {
@@ -796,5 +1117,19 @@
     box-shadow: none;
     border: none;
     padding: 0;
+    gap: 0.75rem;
+  }
+
+  /* Hide drag grip column on print/PDF */
+  .itemsTableBilingual tr td:first-child,
+  .itemsTableBilingual tr th:first-child {
+    display: none;
+  }
+
+  /* Hide all edit-mode UI on print */
+  .editModeBar,
+  .addItemRowBtn,
+  [data-noprint="true"] {
+    display: none !important;
   }
 }

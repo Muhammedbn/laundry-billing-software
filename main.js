@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, net, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, net, shell, dialog } = require('electron');
+const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { initDB, getDB } = require('./database');
@@ -193,3 +194,177 @@ ipcMain.handle('db-query', (event, { query, params }) => {
 ipcMain.on('open-external', (event, url) => {
   shell.openExternal(url);
 });
+
+// Native PDF generation via Electron (properly renders Arabic/RTL text)
+ipcMain.handle('print-to-pdf', async (event, options) => {
+  try {
+    const { filename = 'Invoice.pdf', html = '', css = '' } = options || {};
+
+    // Show save dialog
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save Invoice as PDF',
+      defaultPath: filename,
+      filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+    });
+
+    if (canceled || !filePath) return { success: false, canceled: true };
+
+    // Build a standalone HTML document with all styles embedded
+    const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      background: white;
+      color: #1E293B;
+    }
+    ${css}
+  </style>
+</head>
+<body>
+  ${html}
+</body>
+</html>`;
+
+    // Write to a temp file
+    const tmpPath = path.join(app.getPath('temp'), `invoice_print_${Date.now()}.html`);
+    fs.writeFileSync(tmpPath, fullHtml, 'utf8');
+
+    // Open a hidden BrowserWindow just for printing
+    const printWin = new BrowserWindow({
+      width: 600,
+      height: 900,
+      show: false,
+      webPreferences: { nodeIntegration: false, contextIsolation: true }
+    });
+
+    await printWin.loadFile(tmpPath);
+
+    // Wait for full render (fonts, images, React effects)
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    // Print to PDF — exact A5: 148mm × 210mm
+    const data = await printWin.webContents.printToPDF({
+      printBackground: true,
+      pageSize: { width: 148000, height: 210000 },
+      landscape: false,
+      marginsType: 1,
+    });
+
+    printWin.close();
+
+    // Clean up temp file
+    try { fs.unlinkSync(tmpPath); } catch (_) {}
+
+    fs.writeFileSync(filePath, data);
+    return { success: true, filePath };
+  } catch (err) {
+    console.error('printToPDF error:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// Database backup manual export
+ipcMain.handle('backup-database', async () => {
+  try {
+    const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export Database Backup',
+      defaultPath: 'laundry_pos_backup.sqlite',
+      filters: [{ name: 'SQLite Database', extensions: ['sqlite'] }]
+    });
+
+    if (canceled || !filePath) {
+      return { success: false, error: 'Cancelled' };
+    }
+
+    const db = getDB();
+    await db.backup(filePath);
+    return { success: true, path: filePath };
+  } catch (err) {
+    console.error('Manual backup error:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// Select folder for auto backup
+ipcMain.handle('select-folder', async () => {
+  try {
+    const { filePaths, canceled } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Auto-Backup Folder',
+      properties: ['openDirectory', 'createDirectory']
+    });
+
+    if (canceled || filePaths.length === 0) {
+      return null;
+    }
+    return filePaths[0];
+  } catch (err) {
+    console.error('Select folder error:', err);
+    return null;
+  }
+});
+
+// Silent auto backup execution
+ipcMain.handle('silent-backup', async (event, targetPath) => {
+  try {
+    if (!targetPath) {
+      return { success: false, error: 'No backup path configured' };
+    }
+
+    // Ensure target directory exists
+    if (!fs.existsSync(targetPath)) {
+      fs.mkdirSync(targetPath, { recursive: true });
+    }
+
+    const mainBackupPath = path.join(targetPath, 'laundry_pos_backup.sqlite');
+    const db = getDB();
+
+    // 1. Perform SQLite clean backup to the main filename
+    await db.backup(mainBackupPath);
+
+    // 2. Create timestamped copy
+    const date = new Date();
+    const yyyymmdd = date.getFullYear() +
+      String(date.getMonth() + 1).padStart(2, '0') +
+      String(date.getDate()).padStart(2, '0');
+    const hhmmss = String(date.getHours()).padStart(2, '0') +
+      String(date.getMinutes()).padStart(2, '0') +
+      String(date.getSeconds()).padStart(2, '0');
+    const timestampedFile = `laundry_pos_backup_${yyyymmdd}_${hhmmss}.sqlite`;
+    const timestampedPath = path.join(targetPath, timestampedFile);
+
+    fs.copyFileSync(mainBackupPath, timestampedPath);
+
+    // 3. Keep only the last 10 backups in target path
+    const files = fs.readdirSync(targetPath);
+    const backupFiles = files
+      .filter(f => f.startsWith('laundry_pos_backup_') && f.endsWith('.sqlite'))
+      .map(f => ({
+        name: f,
+        filePath: path.join(targetPath, f),
+        mtime: fs.statSync(path.join(targetPath, f)).mtimeMs
+      }))
+      .sort((a, b) => a.mtime - b.mtime); // Sort ascending (oldest first)
+
+    if (backupFiles.length > 10) {
+      const filesToDelete = backupFiles.slice(0, backupFiles.length - 10);
+      for (const fileInfo of filesToDelete) {
+        try {
+          fs.unlinkSync(fileInfo.filePath);
+        } catch (delErr) {
+          console.error(`Failed to delete old backup file ${fileInfo.name}:`, delErr);
+        }
+      }
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('Silent backup error:', err);
+    return { success: false, error: err.message };
+  }
+});
+
