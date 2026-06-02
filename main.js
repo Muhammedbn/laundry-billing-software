@@ -368,3 +368,95 @@ ipcMain.handle('silent-backup', async (event, targetPath) => {
   }
 });
 
+// Software Update Handlers
+ipcMain.on('check-for-updates', (event) => {
+  const isDev = !app.isPackaged;
+  event.reply('update-status', { type: 'checking' });
+  
+  setTimeout(() => {
+    if (isDev) {
+      event.reply('update-status', { 
+        type: 'available', 
+        version: '1.1.0', 
+        releaseNotes: '• Added premium Software Update screen.\n• Bidirectional payment synchronization with duplicate protection.\n• General performance optimizations and layout fixes.'
+      });
+    } else {
+      try {
+        const { autoUpdater } = require('electron-updater');
+        autoUpdater.checkForUpdatesAndNotify();
+      } catch (err) {
+        event.reply('update-status', { type: 'error', message: 'Auto-updater not configured or available.' });
+      }
+    }
+  }, 1500);
+});
+
+let downloadInterval = null;
+ipcMain.on('download-update', (event) => {
+  const isDev = !app.isPackaged;
+  if (isDev) {
+    let progress = 0;
+    event.reply('update-status', { type: 'downloading', progress });
+    
+    if (downloadInterval) clearInterval(downloadInterval);
+    downloadInterval = setInterval(() => {
+      progress += Math.floor(Math.random() * 15) + 5;
+      if (progress >= 100) {
+        progress = 100;
+        clearInterval(downloadInterval);
+        event.reply('update-status', { type: 'downloaded' });
+      } else {
+        event.reply('update-status', { type: 'downloading', progress });
+      }
+    }, 400);
+  } else {
+    try {
+      const { autoUpdater } = require('electron-updater');
+      autoUpdater.downloadUpdate();
+    } catch (err) {
+      event.reply('update-status', { type: 'error', message: 'Failed to initiate download.' });
+    }
+  }
+});
+
+ipcMain.on('install-update', (event) => {
+  const isDev = !app.isPackaged;
+  if (isDev) {
+    app.relaunch();
+    app.exit();
+  } else {
+    try {
+      const { autoUpdater } = require('electron-updater');
+      autoUpdater.quitAndInstall();
+    } catch (err) {
+      event.reply('update-status', { type: 'error', message: 'Failed to apply update and restart.' });
+    }
+  }
+});
+
+// Setup auto-updater listeners for production if electron-updater is installed
+try {
+  const { autoUpdater } = require('electron-updater');
+  autoUpdater.on('checking-for-update', () => {
+    mainWindow?.webContents.send('update-status', { type: 'checking' });
+  });
+  autoUpdater.on('update-available', (info) => {
+    mainWindow?.webContents.send('update-status', { type: 'available', version: info.version, releaseNotes: info.releaseNotes });
+  });
+  autoUpdater.on('update-not-available', () => {
+    mainWindow?.webContents.send('update-status', { type: 'not-available' });
+  });
+  autoUpdater.on('download-progress', (progressObj) => {
+    mainWindow?.webContents.send('update-status', { type: 'downloading', progress: Math.round(progressObj.percent) });
+  });
+  autoUpdater.on('update-downloaded', () => {
+    mainWindow?.webContents.send('update-status', { type: 'downloaded' });
+  });
+  autoUpdater.on('error', (err) => {
+    mainWindow?.webContents.send('update-status', { type: 'error', message: err.message });
+  });
+} catch (e) {
+  // Graceful fallback
+}
+
+

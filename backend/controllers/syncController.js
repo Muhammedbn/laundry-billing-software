@@ -2,9 +2,10 @@ const Order = require('../models/Order');
 const Customer = require('../models/Customer');
 const Service = require('../models/Service');
 const Category = require('../models/Category');
+const Payment = require('../models/Payment');
 
 exports.syncData = async (req, res) => {
-  const { shopId, orders, customers, lastSyncTimestamp } = req.body;
+  const { shopId, orders, customers, payments, lastSyncTimestamp } = req.body;
   
   try {
     // 1. Process Orders from client
@@ -48,7 +49,19 @@ exports.syncData = async (req, res) => {
       }
     }
 
-    // 3. Process Categories from client
+    // 3. Process Payments from client
+    if (payments && payments.length > 0) {
+      for (const payment of payments) {
+        const { isSynced, ...rest } = payment;
+        await Payment.findOneAndUpdate(
+          { id: payment.id, shopId },
+          { ...rest, shopId, updatedAt: new Date() },
+          { upsert: true, new: true }
+        );
+      }
+    }
+
+    // 4. Process Categories from client
     if (req.body.categories && req.body.categories.length > 0) {
       for (const cat of req.body.categories) {
         const { isSynced, ...rest } = cat;
@@ -60,7 +73,7 @@ exports.syncData = async (req, res) => {
       }
     }
 
-    // 3. Fetch updates from cloud since last sync
+    // 5. Fetch updates from cloud since last sync
     const query = { 
       shopId, 
       updatedAt: { $gt: new Date(lastSyncTimestamp || 0) } 
@@ -70,6 +83,7 @@ exports.syncData = async (req, res) => {
     const newCustomers = await Customer.find(query);
     const newServices = await Service.find(query);
     const newCategories = await Category.find(query);
+    const newPayments = await Payment.find(query);
 
     res.json({
       success: true,
@@ -78,7 +92,8 @@ exports.syncData = async (req, res) => {
         orders: newOrders,
         customers: newCustomers,
         services: newServices,
-        categories: newCategories
+        categories: newCategories,
+        payments: newPayments
       }
     });
   } catch (error) {

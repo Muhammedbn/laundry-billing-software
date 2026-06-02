@@ -76,6 +76,7 @@ const translations = {
     printTags: "Print Tags",
     settleNow: "Settle Now",
     customerstatement: "Customer Statement",
+    taxstatements: "Tax Statements",
     // New translations keys
     orderManagement: "Order Management",
     orderManagementSub: "Track laundry status, generate QR receipts, and manage deliveries.",
@@ -202,6 +203,7 @@ const translations = {
     printTags: "طباعة التاغ",
     settleNow: "تسوية الآن",
     customerstatement: "كشف حساب العميل",
+    taxstatements: "كشوفات الضرائب",
     // New translations keys
     orderManagement: "إدارة الطلبات",
     orderManagementSub: "تتبع حالة الغسيل، وتوليد إيصالات الاستجابة السريعة، وإدارة عمليات التسليم.",
@@ -328,6 +330,7 @@ const translations = {
     printTags: "टैग प्रिंट करें",
     settleNow: "अभी निपटान करें",
     customerstatement: "ग्राहक विवरण",
+    taxstatements: "कर विवरण",
     // New translations keys
     orderManagement: "आदेश प्रबंधन",
     orderManagementSub: "कपड़े धोने की स्थिति को ट्रैक करें, क्यूआर रसीदें जनरेट करें, और डिलीवरी प्रबंधित करें।",

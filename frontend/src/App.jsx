@@ -14,6 +14,8 @@ import Reports from './pages/Reports';
 import RevenueReport from './pages/RevenueReport';
 import CustomerStatement from './pages/CustomerStatement';
 import Expenses from './pages/Expenses';
+import TaxReport from './pages/TaxReport';
+import CancelledOrdersReport from './pages/CancelledOrdersReport';
 import Invoice from './pages/Invoice';
 import Login from './pages/Login';
 import Users from './pages/Users';
@@ -61,6 +63,8 @@ function App() {
             <Route path="expenses" element={<Expenses />} />
             <Route path="customer-statement" element={<CustomerStatement />} />
             <Route path="customer-statement/:customerId" element={<CustomerStatement />} />
+            <Route path="tax" element={<TaxReport />} />
+            <Route path="cancelled" element={<CancelledOrdersReport />} />
           </Route>
           <Route path="expenses" element={<Expenses />} />
           <Route path="settings" element={<Settings />} />

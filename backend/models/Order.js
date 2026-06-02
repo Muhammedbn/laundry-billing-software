@@ -19,6 +19,8 @@ const OrderSchema = new mongoose.Schema({
   paymentMethod: { type: String, default: 'CASH' },
   items: { type: Array, required: true },
   qrCode: { type: String },
+  expectedDeliveryDate: { type: String },
+  specialInstructions: { type: String },
   statusHistory: [{
     status: String,
     updatedBy: String,

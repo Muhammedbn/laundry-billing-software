@@ -40,6 +40,9 @@ export default function Accounts() {
   
   const [transactions, setTransactions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateRange, setDateRange] = useState('Today');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [formData, setFormData] = useState({
     type: 'INCOME',
@@ -170,8 +173,57 @@ export default function Accounts() {
     const matchesSearch = t.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           t.category?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesBank = selectedBankId === 'all' || t.bankAccountId === selectedBankId;
-    return matchesSearch && matchesBank;
+    
+    if (!matchesSearch || !matchesBank) return false;
+    
+    if (dateRange === 'Custom' && (!customStart || !customEnd)) {
+      return false;
+    }
+    
+    if (dateRange !== 'All' && t.date) {
+      const parseDateSafe = (dateStr) => {
+        if (!dateStr) return new Date();
+        const parts = dateStr.split(' ');
+        const datePart = parts[0]; // YYYY-MM-DD
+        const dateParts = datePart.split('-');
+        return new Date(parseInt(dateParts[0], 10), parseInt(dateParts[1], 10) - 1, parseInt(dateParts[2], 10));
+      };
+      
+      const txDate = parseDateSafe(t.date);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      if (dateRange === 'Today') {
+        return txDate.getFullYear() === today.getFullYear() &&
+               txDate.getMonth() === today.getMonth() &&
+               txDate.getDate() === today.getDate();
+      }
+      if (dateRange === 'This Week') {
+        const startOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 7);
+        return txDate >= startOfWeek && txDate < endOfWeek;
+      }
+      if (dateRange === 'This Month') {
+        return txDate.getFullYear() === today.getFullYear() &&
+               txDate.getMonth() === today.getMonth();
+      }
+      if (dateRange === 'This Year') {
+        return txDate.getFullYear() === today.getFullYear();
+      }
+      if (dateRange === 'Custom') {
+        const start = new Date(customStart);
+        start.setHours(0,0,0,0);
+        const end = new Date(customEnd);
+        end.setHours(23,59,59,999);
+        return txDate >= start && txDate <= end;
+      }
+    }
+    return true;
   });
+
+  const filteredIncome = filteredTransactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0);
+  const filteredExpense = filteredTransactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + t.amount, 0);
 
   return (
     <div className={styles.container}>
@@ -202,7 +254,7 @@ export default function Accounts() {
           </div>
           <div className={styles.statInfo}>
             <span>Total Income</span>
-            <h3 className={styles.incomeText}>+<CurrencySymbol size={22} /> {stats.income.toFixed(2)}</h3>
+            <h3 className={styles.incomeText}>+<CurrencySymbol size={22} /> {filteredIncome.toFixed(2)}</h3>
           </div>
         </div>
         <div className={styles.statCard}>
@@ -211,7 +263,7 @@ export default function Accounts() {
           </div>
           <div className={styles.statInfo}>
             <span>Total Expense</span>
-            <h3 className={styles.expenseText}>-<CurrencySymbol size={22} /> {stats.expense.toFixed(2)}</h3>
+            <h3 className={styles.expenseText}>-<CurrencySymbol size={22} /> {filteredExpense.toFixed(2)}</h3>
           </div>
         </div>
       </div>
@@ -222,6 +274,40 @@ export default function Accounts() {
           <div className={styles.cardHeader}>
             <h3>Transaction History</h3>
             <div className={styles.filters}>
+              <div className={styles.search} style={{ width: '180px' }}>
+                <Calendar size={16} />
+                <select 
+                  value={dateRange}
+                  onChange={(e) => setDateRange(e.target.value)}
+                  style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '0.85rem', fontWeight: 600 }}
+                >
+                  <option value="All">All Time</option>
+                  <option value="Today">Today</option>
+                  <option value="This Week">This Week</option>
+                  <option value="This Month">This Month</option>
+                  <option value="This Year">This Year</option>
+                  <option value="Custom">Custom Range</option>
+                </select>
+              </div>
+
+              {dateRange === 'Custom' && (
+                <div className={styles.search} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', width: 'auto' }}>
+                  <input 
+                    type="date" 
+                    value={customStart} 
+                    onChange={(e) => setCustomStart(e.target.value)}
+                    style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.85rem' }}
+                  />
+                  <span style={{ fontSize: '0.8rem', color: '#64748B', fontWeight: 600 }}>to</span>
+                  <input 
+                    type="date" 
+                    value={customEnd} 
+                    onChange={(e) => setCustomEnd(e.target.value)}
+                    style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.85rem' }}
+                  />
+                </div>
+              )}
+
               {!isCash && bankAccounts.length > 0 && (
                 <div className={styles.search} style={{ width: '220px' }}>
                   <Landmark size={16} />

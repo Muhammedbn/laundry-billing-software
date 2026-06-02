@@ -57,8 +57,7 @@ export default function Dashboard() {
         `SELECT p.*, c.name as customerName 
          FROM payments p 
          LEFT JOIN customers c ON p.customerId = c.id 
-         ORDER BY p.createdAt DESC 
-         LIMIT 10`, 
+         ORDER BY p.createdAt DESC`, 
         []
       );
 

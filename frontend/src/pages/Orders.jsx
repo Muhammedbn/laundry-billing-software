@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Search, Filter, ChevronLeft, ChevronRight, MoreHorizontal, 
+  Search, Filter, ChevronLeft, ChevronRight, Calendar,
   Clock, Package, CheckCircle, AlertCircle, ChevronDown, 
   X, Printer, CreditCard, Wallet, User, History, QrCode, MessageCircle, Phone, DollarSign, Truck
 } from 'lucide-react';
@@ -51,6 +51,9 @@ export default function Orders({ isPendingView = false }) {
   const [pendingSubFilter, setPendingSubFilter] = useState('All'); // 'All', 'Pending', 'Overdue'
   const [workflowFilter, setWorkflowFilter] = useState('All'); // 'All', 'Confirmed', 'Processing', 'Ready', 'Delivered', 'Cancelled'
   const [isPrintingTags, setIsPrintingTags] = useState(false);
+  const [dateRange, setDateRange] = useState('All');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
 
   // Translation helpers
   const translateStatus = (status) => {
@@ -81,10 +84,47 @@ export default function Orders({ isPendingView = false }) {
     return diffDays > overdueLimit;
   };
 
+  /* ── Date range filter helper ─────────────────────── */
+  const getDateBounds = () => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (dateRange === 'Today') {
+      return { from: today, to: new Date(today.getTime() + 86400000 - 1) };
+    }
+    if (dateRange === 'This Week') {
+      const day = today.getDay();
+      const start = new Date(today); start.setDate(today.getDate() - day);
+      const end = new Date(start); end.setDate(start.getDate() + 6);
+      return { from: start, to: end };
+    }
+    if (dateRange === 'This Month') {
+      return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59) };
+    }
+    if (dateRange === 'This Year') {
+      return { from: new Date(now.getFullYear(), 0, 1), to: new Date(now.getFullYear(), 11, 31, 23, 59, 59) };
+    }
+    if (dateRange === 'Custom' && customStart && customEnd) {
+      return { from: new Date(customStart), to: new Date(customEnd + 'T23:59:59') };
+    }
+    return null; // All time
+  };
+
+  const dateFilteredOrders = React.useMemo(() => {
+    if (dateRange === 'Custom' && (!customStart || !customEnd)) {
+      return [];
+    }
+    const bounds = getDateBounds();
+    if (!bounds) return orders;
+    return orders.filter(o => {
+      const created = new Date(o.createdAt);
+      return created >= bounds.from && created <= bounds.to;
+    });
+  }, [orders, dateRange, customStart, customEnd]);
+
   // Filtering logic
   let filteredOrders = isPendingView 
-    ? orders.filter(o => o.dueAmount > 0 || o.paymentStatus !== 'Paid') 
-    : orders;
+    ? dateFilteredOrders.filter(o => o.dueAmount > 0 || o.paymentStatus !== 'Paid') 
+    : dateFilteredOrders;
 
   if (isPendingView) {
     if (pendingSubFilter === 'Pending') {
@@ -107,35 +147,35 @@ export default function Orders({ isPendingView = false }) {
   }
 
   // Financial Calculations for KPIs
-  const totalAmount = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const totalAmount = dateFilteredOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
   
-  const totalPaid = orders
+  const totalPaid = dateFilteredOrders
     .filter(o => (o.dueAmount === 0 || o.dueAmount === null) && o.totalAmount > 0)
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
     
-  const totalPending = orders
+  const totalPending = dateFilteredOrders
     .filter(o => (o.dueAmount > 0))
     .reduce((sum, o) => sum + (o.dueAmount || 0), 0);
   
-  const overdueOrdersList = orders.filter(o => isOverdue(o));
+  const overdueOrdersList = dateFilteredOrders.filter(o => isOverdue(o));
   const overdueAmount = overdueOrdersList.reduce((sum, o) => sum + (o.dueAmount || 0), 0);
 
   const counts = {
-    all: orders.filter(o => o.dueAmount > 0).length,
-    pending: orders.filter(o => o.dueAmount > 0 && !isOverdue(o)).length,
+    all: dateFilteredOrders.filter(o => o.dueAmount > 0).length,
+    pending: dateFilteredOrders.filter(o => o.dueAmount > 0 && !isOverdue(o)).length,
     overdue: overdueOrdersList.length
   };
 
   const workflowCounts = {
-    All: orders.length,
-    Confirmed: orders.filter(o => ['Confirmed', 'Pending', 'Payment Pending', 'Credit'].includes(o.status)).length,
-    Processing: orders.filter(o => !['Confirmed', 'Pending', 'Payment Pending', 'Credit', 'Ready', 'Ready to Pick up', 'Out for Delivery', 'Delivered', 'Cancelled'].includes(o.status) || ['Picked Up', 'Washing', 'Drying', 'Ironing'].includes(o.status)).length,
-    Ready: orders.filter(o => ['Ready', 'Ready to Pick up', 'Out for Delivery'].includes(o.status)).length,
-    Delivered: orders.filter(o => o.status === 'Delivered').length,
-    Cancelled: orders.filter(o => o.status === 'Cancelled').length
+    All: dateFilteredOrders.length,
+    Confirmed: dateFilteredOrders.filter(o => ['Confirmed', 'Pending', 'Payment Pending', 'Credit'].includes(o.status)).length,
+    Processing: dateFilteredOrders.filter(o => !['Confirmed', 'Pending', 'Payment Pending', 'Credit', 'Ready', 'Ready to Pick up', 'Out for Delivery', 'Delivered', 'Cancelled'].includes(o.status) || ['Picked Up', 'Washing', 'Drying', 'Ironing'].includes(o.status)).length,
+    Ready: dateFilteredOrders.filter(o => ['Ready', 'Ready to Pick up', 'Out for Delivery'].includes(o.status)).length,
+    Delivered: dateFilteredOrders.filter(o => o.status === 'Delivered').length,
+    Cancelled: dateFilteredOrders.filter(o => o.status === 'Cancelled').length
   };
 
-  const dueSoonOrders = orders.filter(o => {
+  const dueSoonOrders = dateFilteredOrders.filter(o => {
     if (o.status !== 'Credit' && o.status !== 'Payment Pending') return false;
     const diffDays = Math.ceil(Math.abs(new Date() - new Date(o.createdAt)) / (1000 * 60 * 60 * 24));
     return diffDays <= 7 && diffDays > 0;
@@ -385,10 +425,11 @@ export default function Orders({ isPendingView = false }) {
         );
 
         // Record Payment in payments table
+        const currentTimestamp = new Date().toISOString();
         await window.electronAPI.dbQuery(
-          `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [`PAY-HEAL-${selectedOrder.id}`, selectedOrder.customerId || 'Walk-in', selectedOrder.id, DEFAULT_SHOP_ID, amountToPay, payMethod, 'SUCCESS', new Date().toISOString()]
+          `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt, isSynced, updatedAt) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+          [`PAY-HEAL-${selectedOrder.id}`, selectedOrder.customerId || 'Walk-in', selectedOrder.id, DEFAULT_SHOP_ID, amountToPay, payMethod, 'SUCCESS', currentTimestamp, currentTimestamp]
         );
 
         // Call the healer to automatically reconcile customer balance
@@ -573,6 +614,40 @@ export default function Orders({ isPendingView = false }) {
           >
             {t('overdue', settings.language)} ({counts.overdue})
           </button>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Calendar size={16} color="#64748B" />
+            <select 
+              value={dateRange} 
+              onChange={(e) => setDateRange(e.target.value)}
+              style={{ border: '1px solid #E2E8F0', padding: '0.4rem 0.8rem', borderRadius: '8px', fontWeight: 600, outline: 'none', fontSize: '0.85rem' }}
+            >
+              <option value="All">All Time</option>
+              <option value="Today">Today</option>
+              <option value="This Week">This Week</option>
+              <option value="This Month">This Month</option>
+              <option value="This Year">This Year</option>
+              <option value="Custom">Custom Range</option>
+            </select>
+
+            {dateRange === 'Custom' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <input 
+                  type="date" 
+                  value={customStart} 
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  style={{ border: '1px solid #E2E8F0', padding: '0.35rem 0.5rem', borderRadius: '8px', fontSize: '0.8rem', outline: 'none' }}
+                />
+                <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>to</span>
+                <input 
+                  type="date" 
+                  value={customEnd} 
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  style={{ border: '1px solid #E2E8F0', padding: '0.35rem 0.5rem', borderRadius: '8px', fontSize: '0.8rem', outline: 'none' }}
+                />
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div className={styles.subFilterRow}>
@@ -613,6 +688,40 @@ export default function Orders({ isPendingView = false }) {
           >
             {t('cancelled', settings.language)} ({workflowCounts.Cancelled})
           </button>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Calendar size={16} color="#64748B" />
+            <select 
+              value={dateRange} 
+              onChange={(e) => setDateRange(e.target.value)}
+              style={{ border: '1px solid #E2E8F0', padding: '0.4rem 0.8rem', borderRadius: '8px', fontWeight: 600, outline: 'none', fontSize: '0.85rem' }}
+            >
+              <option value="All">All Time</option>
+              <option value="Today">Today</option>
+              <option value="This Week">This Week</option>
+              <option value="This Month">This Month</option>
+              <option value="This Year">This Year</option>
+              <option value="Custom">Custom Range</option>
+            </select>
+
+            {dateRange === 'Custom' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <input 
+                  type="date" 
+                  value={customStart} 
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  style={{ border: '1px solid #E2E8F0', padding: '0.35rem 0.5rem', borderRadius: '8px', fontSize: '0.8rem', outline: 'none' }}
+                />
+                <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>to</span>
+                <input 
+                  type="date" 
+                  value={customEnd} 
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  style={{ border: '1px solid #E2E8F0', padding: '0.35rem 0.5rem', borderRadius: '8px', fontSize: '0.8rem', outline: 'none' }}
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -694,12 +803,12 @@ export default function Orders({ isPendingView = false }) {
             <thead>
               <tr>
                 <th>{t('orderId', settings.language)}</th>
+                <th>{t('date', settings.language)}</th>
                 <th>{t('customer', settings.language)}</th>
                 <th>{t('whatsapp', settings.language)}</th>
                 <th>{t('totalAmount', settings.language)}</th>
                 <th>{t('paymentMethodLabel', settings.language)}</th>
                 <th>{t('status', settings.language)}</th>
-                <th>{t('date', settings.language)}</th>
                 <th className={styles.actionsHeader}>{t('paymentStatus', settings.language)}</th>
               </tr>
             </thead>
@@ -718,13 +827,13 @@ export default function Orders({ isPendingView = false }) {
                   }}>
                     <td className={styles.orderIdCell}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <div className={styles.qrPlaceholder}><QrCode size={18} /></div>
                         <div>
                           <span className={styles.idText}>{order.id}</span>
                           <span className={styles.billText}>{t('bill', settings.language)}: {order.billNumber || 'N/A'}</span>
                         </div>
                       </div>
                     </td>
+                    <td className={styles.dateText}>{formatDate(order.createdAt)}</td>
                     <td>
                       <div className={styles.custCell}>
                         <span className={styles.custName}>
@@ -797,7 +906,6 @@ export default function Orders({ isPendingView = false }) {
                         )}
                       </div>
                     </td>
-                    <td className={styles.dateText}>{formatDate(order.createdAt)}</td>
                     <td className={styles.actionsCell}>
                       <div className={styles.actionCellContainer}>
                         <div className={styles.paymentCol}>
@@ -835,20 +943,6 @@ export default function Orders({ isPendingView = false }) {
                               {t('pay', settings.language)}
                             </button>
                           ) : null}
-                        </div>
-                        
-                        <div className={styles.moreCol}>
-                          <button 
-                            className={styles.moreBtn}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedOrder(order);
-                              setShowStatusModal(true);
-                            }}
-                            title={t('orderDetails', settings.language)}
-                          >
-                            <MoreHorizontal size={18} />
-                          </button>
                         </div>
                       </div>
                     </td>

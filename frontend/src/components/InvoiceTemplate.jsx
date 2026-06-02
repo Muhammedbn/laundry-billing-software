@@ -301,6 +301,12 @@ export default function InvoiceTemplate({ order, settings, isPreview = false, on
             <span className={styles.metaLabelEnAr}>{formatLabel('Date & Time', 'التاريخ والوقت')}:</span>
             <span className={styles.metaValue} style={{ fontSize: '0.82rem' }}>{order.date}</span>
           </div>
+          {order.expectedDeliveryDate && (
+            <div className={styles.metaRow}>
+              <span className={styles.metaLabelEnAr}>{formatLabel('Exp. Delivery', 'تاريخ التسليم المتوقع')}:</span>
+              <span className={styles.metaValue} style={{ color: '#E11D48', fontWeight: 'bold' }}>{order.expectedDeliveryDate}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -320,6 +326,25 @@ export default function InvoiceTemplate({ order, settings, isPreview = false, on
           )}
         </div>
       </div>
+
+      {/* 4b. Special Instructions */}
+      {order.specialInstructions && (
+        <div className={styles.specialInstructionsBlock} style={{
+          marginTop: '0.5rem',
+          marginBottom: '0.75rem',
+          padding: '0.75rem 1.25rem',
+          background: '#FFFBEB',
+          border: '1px solid #FCD34D',
+          borderRadius: '12px',
+          color: '#B45309',
+          fontSize: '0.88rem'
+        }}>
+          <strong style={{ display: 'block', marginBottom: '0.25rem' }}>
+            {formatLabel('⚠️ Special Instructions', '⚠️ تعليمات خاصة')}:
+          </strong>
+          <span>{order.specialInstructions}</span>
+        </div>
+      )}
 
       {/* 5. Items Table */}
       <table className={styles.itemsTableBilingual}>
@@ -372,12 +397,24 @@ export default function InvoiceTemplate({ order, settings, isPreview = false, on
 
               {/* Name */}
               <td>
-                <EditableCell
-                  editing={editMode}
-                  value={item.name}
-                  onChange={(v) => updateItem(idx, 'name', v)}
-                  className={styles.itemName}
-                />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <EditableCell
+                    editing={editMode}
+                    value={item.name}
+                    onChange={(v) => updateItem(idx, 'name', v)}
+                    className={styles.itemName}
+                  />
+                  {item.description && (
+                    <span style={{ fontSize: '0.75rem', color: '#DC2626', fontWeight: 600, marginTop: '0.15rem' }}>
+                      ⚠️ Damage Notes: {item.description}
+                    </span>
+                  )}
+                  {item.addons && item.addons.length > 0 && (
+                    <span style={{ fontSize: '0.7rem', color: '#2563EB', fontWeight: 700, background: '#EFF6FF', padding: '0.1rem 0.4rem', borderRadius: '4px', width: 'fit-content', marginTop: '0.2rem' }}>
+                      + {item.addons.join(', ')}
+                    </span>
+                  )}
+                </div>
               </td>
 
               {/* Service type */}

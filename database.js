@@ -100,7 +100,9 @@ function initDB(appPath) {
       createdAt TEXT,
       isSynced INTEGER DEFAULT 0,
       updatedAt TEXT,
-      paymentMethod TEXT DEFAULT 'CASH'
+      paymentMethod TEXT DEFAULT 'CASH',
+      expectedDeliveryDate TEXT,
+      specialInstructions TEXT
     );
 
     CREATE TABLE IF NOT EXISTS payments (
@@ -112,7 +114,8 @@ function initDB(appPath) {
       method TEXT,
       status TEXT,
       isSynced INTEGER DEFAULT 0,
-      createdAt TEXT
+      createdAt TEXT,
+      updatedAt TEXT
     );
 
     CREATE TABLE IF NOT EXISTS expenses (
@@ -141,7 +144,20 @@ function initDB(appPath) {
       isSynced INTEGER DEFAULT 0,
       updatedAt TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS sync_state (
+      shopId TEXT PRIMARY KEY,
+      lastSyncTimestamp TEXT,
+      updatedAt TEXT
+    );
   `);
+
+  try {
+    db.exec(`ALTER TABLE orders ADD COLUMN expectedDeliveryDate TEXT;`);
+  } catch (e) { /* already exists */ }
+  try {
+    db.exec(`ALTER TABLE orders ADD COLUMN specialInstructions TEXT;`);
+  } catch (e) { /* already exists */ }
 
   // Migrations
   try {
@@ -206,6 +222,10 @@ function initDB(appPath) {
     }
     if (!payCols.some(col => col.name === 'shopId')) {
       db.exec("ALTER TABLE payments ADD COLUMN shopId TEXT;");
+    }
+    if (!payCols.some(col => col.name === 'updatedAt')) {
+      db.exec("ALTER TABLE payments ADD COLUMN updatedAt TEXT;");
+      db.exec("UPDATE payments SET updatedAt = createdAt WHERE updatedAt IS NULL;");
     }
     const txnCols = db.prepare("PRAGMA table_info(account_transactions)").all();
     if (!txnCols.some(col => col.name === 'icon')) {
@@ -331,9 +351,9 @@ function runDataHealer(db) {
               const newUnlinkedAmount = payment.amount - remainingToLink;
               db.prepare("UPDATE payments SET amount = ?, isSynced = 0 WHERE id = ?").run(newUnlinkedAmount, payment.id);
               
-              db.prepare(`INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt, isSynced) 
-                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`)
-                .run(`PAY-SPLIT-${Date.now()}-${order.id}`, customer.id, order.id, payment.shopId || 'SHOP_01', remainingToLink, splitPayMethod, 'SUCCESS', payment.createdAt);
+              db.prepare(`INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt, isSynced, updatedAt) 
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
+                .run(`PAY-SPLIT-${Date.now()}-${order.id}`, customer.id, order.id, payment.shopId || 'SHOP_01', remainingToLink, splitPayMethod, 'SUCCESS', payment.createdAt, timestamp);
               
               remainingToLink = 0;
             }

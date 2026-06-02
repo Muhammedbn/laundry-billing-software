@@ -21,6 +21,7 @@ export default function CustomerStatement() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
 
+  const [dateRange, setDateRange] = useState('Today');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [filterType, setFilterType] = useState('All'); // All | Orders | Payments
@@ -32,6 +33,39 @@ export default function CustomerStatement() {
 
   const dropdownRef = useRef(null);
   const inputRef = useRef(null);
+
+  /* ─── Sync dateFrom and dateTo based on dateRange ─── */
+  useEffect(() => {
+    const now = new Date();
+    if (dateRange === 'Today') {
+      const todayStr = now.toISOString().split('T')[0];
+      setDateFrom(todayStr);
+      setDateTo(todayStr);
+    } else if (dateRange === 'This Week') {
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const day = today.getDay();
+      const start = new Date(today); start.setDate(today.getDate() - day);
+      const end = new Date(start); end.setDate(start.getDate() + 6);
+      setDateFrom(start.toISOString().split('T')[0]);
+      setDateTo(end.toISOString().split('T')[0]);
+    } else if (dateRange === 'This Month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      setDateFrom(start.toISOString().split('T')[0]);
+      setDateTo(end.toISOString().split('T')[0]);
+    } else if (dateRange === 'This Year') {
+      const start = new Date(now.getFullYear(), 0, 1);
+      const end = new Date(now.getFullYear(), 11, 31);
+      setDateFrom(start.toISOString().split('T')[0]);
+      setDateTo(end.toISOString().split('T')[0]);
+    } else if (dateRange === 'All') {
+      setDateFrom('');
+      setDateTo('');
+    } else if (dateRange === 'Custom') {
+      setDateFrom('');
+      setDateTo('');
+    }
+  }, [dateRange]);
 
   /* ─── Close dropdown on outside click ────────────── */
   useEffect(() => {
@@ -87,10 +121,16 @@ export default function CustomerStatement() {
   useEffect(() => {
     if (!selectedCustomer) return;
     fetchStatement(selectedCustomer.id);
-  }, [selectedCustomer, dateFrom, dateTo]);
+  }, [selectedCustomer, dateRange, dateFrom, dateTo]);
 
   const fetchStatement = async (customerId) => {
     if (!window.electronAPI?.dbQuery) return;
+    if (dateRange === 'Custom' && (!dateFrom || !dateTo)) {
+      setOrders([]);
+      setPayments([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       /* Build date conditions */
@@ -345,17 +385,33 @@ export default function CustomerStatement() {
         <div className={styles.dateFilters}>
           <div className={styles.dateField}>
             <Calendar size={14} color="#94A3B8" />
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={styles.dateInput} />
+            <select
+              value={dateRange}
+              onChange={e => setDateRange(e.target.value)}
+              className={styles.dateInput}
+              style={{ border: 'none', background: 'transparent', outline: 'none', fontWeight: 600, width: '150px' }}
+            >
+              <option value="All">All Time</option>
+              <option value="Today">Today</option>
+              <option value="This Week">This Week</option>
+              <option value="This Month">This Month</option>
+              <option value="This Year">This Year</option>
+              <option value="Custom">Custom Range</option>
+            </select>
           </div>
-          <span className={styles.dateSep}>to</span>
-          <div className={styles.dateField}>
-            <Calendar size={14} color="#94A3B8" />
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={styles.dateInput} />
-          </div>
-          {(dateFrom || dateTo) && (
-            <button className={styles.clearBtn} onClick={() => { setDateFrom(''); setDateTo(''); }}>
-              <RotateCcw size={14} /> Clear
-            </button>
+
+          {dateRange === 'Custom' && (
+            <>
+              <div className={styles.dateField}>
+                <Calendar size={14} color="#94A3B8" />
+                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={styles.dateInput} />
+              </div>
+              <span className={styles.dateSep}>to</span>
+              <div className={styles.dateField}>
+                <Calendar size={14} color="#94A3B8" />
+                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={styles.dateInput} />
+              </div>
+            </>
           )}
         </div>
 

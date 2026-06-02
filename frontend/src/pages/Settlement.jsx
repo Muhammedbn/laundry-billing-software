@@ -100,7 +100,7 @@ export default function Settlement() {
           query += ' WHERE ' + conditions.join(' AND ');
         }
         
-        query += ' ORDER BY balance DESC, name ASC LIMIT 50';
+        query += ' ORDER BY balance DESC, name ASC';
         const res = await window.electronAPI.dbQuery(query, params);
         if (res.success) setCustomers(res.data);
       } catch (err) {
@@ -167,7 +167,7 @@ export default function Settlement() {
           [customerId]
         );
         const historyRes = await window.electronAPI.dbQuery(
-          'SELECT * FROM payments WHERE customerId = ? ORDER BY createdAt DESC LIMIT 20',
+          'SELECT * FROM payments WHERE customerId = ? ORDER BY createdAt DESC',
           [customerId]
         );
         
@@ -246,9 +246,9 @@ export default function Settlement() {
             );
 
             await window.electronAPI.dbQuery(
-              `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-              [`PAY-${Date.now()}-${bill.id}`, selectedCustomer.id, bill.id, DEFAULT_SHOP_ID, allocate, paymentMethod, 'SUCCESS', timestamp]
+              `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt, isSynced, updatedAt) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+              [`PAY-${Date.now()}-${bill.id}`, selectedCustomer.id, bill.id, DEFAULT_SHOP_ID, allocate, paymentMethod, 'SUCCESS', timestamp, timestamp]
             );
           }
         }
@@ -256,9 +256,9 @@ export default function Settlement() {
         // If there's remaining unapplied payment (excess / advance payment)
         if (remaining > 0) {
           await window.electronAPI.dbQuery(
-            `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [`PAY-ADV-${Date.now()}`, selectedCustomer.id, null, DEFAULT_SHOP_ID, remaining, paymentMethod, 'SUCCESS', timestamp]
+            `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt, isSynced, updatedAt) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+            [`PAY-ADV-${Date.now()}`, selectedCustomer.id, null, DEFAULT_SHOP_ID, remaining, paymentMethod, 'SUCCESS', timestamp, timestamp]
           );
         }
 

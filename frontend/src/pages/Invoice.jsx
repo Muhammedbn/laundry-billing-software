@@ -97,7 +97,9 @@ export default function Invoice() {
                   sub: item.type || 'Standard Treatment',
                   qty: item.qty,
                   price: item.price,
-                  total: item.price * item.qty
+                  total: item.price * item.qty,
+                  addons: item.addons || [],
+                  description: item.description || ''
                 })) : [];
               })(),
               subtotal: subtotal,
@@ -105,7 +107,9 @@ export default function Invoice() {
               total: rawOrder.totalAmount,
               paidAmount: paidAmount,
               previousBalance: previousBalance,
-              totalBalance: totalBalance
+              totalBalance: totalBalance,
+              expectedDeliveryDate: rawOrder.expectedDeliveryDate || '',
+              specialInstructions: rawOrder.specialInstructions || ''
             });
           } else {
             useFallback();
@@ -139,7 +143,9 @@ export default function Invoice() {
         total: 113.40,
         paidAmount: 113.40,
         previousBalance: 0.00,
-        totalBalance: 0.00
+        totalBalance: 0.00,
+        expectedDeliveryDate: '2026-06-02',
+        specialInstructions: 'Handle with care'
       });
     };
 

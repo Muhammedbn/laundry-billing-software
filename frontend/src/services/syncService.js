@@ -14,16 +14,21 @@ export const syncData = async () => {
     // 1. Fetch unsynced local data
     const resOrders = await window.electronAPI.dbQuery('SELECT * FROM orders WHERE isSynced = 0', []);
     const resCustomers = await window.electronAPI.dbQuery('SELECT * FROM customers WHERE isSynced = 0', []);
+    const resPayments = await window.electronAPI.dbQuery('SELECT * FROM payments WHERE isSynced = 0', []);
     
     const unsyncedOrders = resOrders.data || [];
     const unsyncedCustomers = resCustomers.data || [];
+    const unsyncedPayments = resPayments.data || [];
 
-    if (unsyncedOrders.length === 0 && unsyncedCustomers.length === 0) {
+    if (unsyncedOrders.length === 0 && unsyncedCustomers.length === 0 && unsyncedPayments.length === 0) {
       console.log('No local data to sync.');
     }
 
-    // 2. Get last sync timestamp from local storage
-    const lastSyncTimestamp = sessionStorage.getItem('lastSyncTimestamp') || null;
+    // 2. Get last sync timestamp from SQLite database
+    const syncRes = await window.electronAPI.dbQuery('SELECT lastSyncTimestamp FROM sync_state WHERE shopId = ?', [shopId]);
+    const lastSyncTimestamp = (syncRes.success && syncRes.data && syncRes.data.length > 0) 
+      ? syncRes.data[0].lastSyncTimestamp 
+      : null;
 
     // 3. Send payload to backend
     const payload = {
@@ -34,6 +39,7 @@ export const syncData = async () => {
         statusHistory: typeof order.statusHistory === 'string' ? JSON.parse(order.statusHistory) : (order.statusHistory || [])
       })),
       customers: unsyncedCustomers,
+      payments: unsyncedPayments,
       lastSyncTimestamp
     };
 
@@ -47,10 +53,14 @@ export const syncData = async () => {
       for (const cust of unsyncedCustomers) {
         await window.electronAPI.dbQuery('UPDATE customers SET isSynced = 1 WHERE id = ?', [cust.id]);
       }
+      for (const payment of unsyncedPayments) {
+        await window.electronAPI.dbQuery('UPDATE payments SET isSynced = 1 WHERE id = ?', [payment.id]);
+      }
 
       // 5. Save new items from backend to local DB
       const incomingOrders = response.data.data?.orders || [];
       const incomingCustomers = response.data.data?.customers || [];
+      const incomingPayments = response.data.data?.payments || [];
 
       for (const order of incomingOrders) {
         // LOCAL-WINS: If the local order was updated more recently than the incoming MongoDB data,
@@ -72,8 +82,8 @@ export const syncData = async () => {
         const statusHistoryJson = typeof order.statusHistory === 'string' ? order.statusHistory : JSON.stringify(order.statusHistory || []);
         await window.electronAPI.dbQuery(`
           INSERT OR REPLACE INTO orders 
-          (id, shopId, billNumber, branchId, customerId, status, totalAmount, paidAmount, dueAmount, paymentStatus, items, statusHistory, createdAt, isSynced, updatedAt, paymentMethod) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+          (id, shopId, billNumber, branchId, customerId, status, totalAmount, paidAmount, dueAmount, paymentStatus, items, statusHistory, createdAt, isSynced, updatedAt, paymentMethod, expectedDeliveryDate, specialInstructions) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
         `, [
           order.id, 
           order.shopId, 
@@ -89,7 +99,9 @@ export const syncData = async () => {
           statusHistoryJson,
           order.createdAt, 
           order.updatedAt || new Date().toISOString(),
-          order.paymentMethod || 'CASH'
+          order.paymentMethod || 'CASH',
+          order.expectedDeliveryDate || null,
+          order.specialInstructions || null
         ]);
       }
 
@@ -125,8 +137,42 @@ export const syncData = async () => {
         ]);
       }
 
-      // Update last sync time
-      sessionStorage.setItem('lastSyncTimestamp', response.data.timestamp);
+      for (const payment of incomingPayments) {
+        // LOCAL-WINS: Check updatedAt to resolve conflicts or prevent overwrites of newer local changes.
+        const localRes = await window.electronAPI.dbQuery(
+          'SELECT updatedAt, isSynced FROM payments WHERE id = ?', [payment.id]
+        );
+        if (localRes.success && localRes.data[0]) {
+          const localUpdatedAt = new Date(localRes.data[0].updatedAt).getTime();
+          const remoteUpdatedAt = new Date(payment.updatedAt).getTime();
+          if (localRes.data[0].isSynced === 0 || localUpdatedAt > remoteUpdatedAt) {
+            console.log(`Sync: Preserving local data for payment ${payment.id} (local is newer or has pending changes)`);
+            continue;
+          }
+        }
+
+        await window.electronAPI.dbQuery(`
+          INSERT OR REPLACE INTO payments 
+          (id, customerId, orderId, shopId, amount, method, status, createdAt, isSynced, updatedAt) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        `, [
+          payment.id,
+          payment.customerId || null,
+          payment.orderId || null,
+          payment.shopId,
+          payment.amount,
+          payment.method,
+          payment.status,
+          payment.createdAt,
+          payment.updatedAt || new Date().toISOString()
+        ]);
+      }
+
+      // Update last sync time in SQLite database
+      await window.electronAPI.dbQuery(
+        'INSERT OR REPLACE INTO sync_state (shopId, lastSyncTimestamp, updatedAt) VALUES (?, ?, ?)',
+        [shopId, response.data.timestamp, new Date().toISOString()]
+      );
       console.log('Sync completed successfully');
       return true;
     }

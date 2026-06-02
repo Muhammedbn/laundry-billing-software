@@ -146,9 +146,9 @@ export default function Customers() {
 
             // Record Payment Entry linked to Bill
             await window.electronAPI.dbQuery(
-              `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-              [`PAY-${Date.now()}-${bill.id}`, selectedCustomer.id, bill.id, DEFAULT_SHOP_ID, paymentForThisBill, paymentData.method, 'SUCCESS', timestamp]
+              `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt, isSynced, updatedAt) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+              [`PAY-${Date.now()}-${bill.id}`, selectedCustomer.id, bill.id, DEFAULT_SHOP_ID, paymentForThisBill, paymentData.method, 'SUCCESS', timestamp, timestamp]
             );
           }
         } else {
@@ -158,9 +158,9 @@ export default function Customers() {
         // If there's remaining unapplied payment (excess / advance payment), record it as an unlinked payment
         if (remainingPayment > 0) {
           await window.electronAPI.dbQuery(
-            `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [`PAY-ADV-${Date.now()}`, selectedCustomer.id, null, DEFAULT_SHOP_ID, remainingPayment, paymentData.method, 'SUCCESS', timestamp]
+            `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt, isSynced, updatedAt) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+            [`PAY-ADV-${Date.now()}`, selectedCustomer.id, null, DEFAULT_SHOP_ID, remainingPayment, paymentData.method, 'SUCCESS', timestamp, timestamp]
           );
         }
 
@@ -246,10 +246,8 @@ export default function Customers() {
     }
   };
 
-  const ITEMS_PER_PAGE = 12;
-  const totalPages = Math.ceil(customers.length / ITEMS_PER_PAGE) || 1;
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedCustomers = customers.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const startIndex = 0;
+  const paginatedCustomers = customers;
 
   const totalReceivables = customers.reduce((sum, c) => sum + (c.balance > 0 ? c.balance : 0), 0);
   const totalAdvances = customers.reduce((sum, c) => sum + (c.balance < 0 ? Math.abs(c.balance) : 0), 0);
@@ -438,39 +436,11 @@ export default function Customers() {
           </tbody>
         </table>
 
-        {/* Pagination */}
         {customers.length > 0 && (
           <div className={styles.pagination}>
             <span className={styles.paginationInfo}>
-              Showing {startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, customers.length)} of {customers.length} customers
+              Showing all {customers.length} customers
             </span>
-            <div className={styles.paginationBtns}>
-              <button 
-                className={styles.pageBtn}
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              >
-                <ChevronLeft size={16} />
-              </button>
-              
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
-                <button 
-                  key={pageNum}
-                  className={`${styles.pageBtn} ${currentPage === pageNum ? styles.active : ''}`}
-                  onClick={() => setCurrentPage(pageNum)}
-                >
-                  {pageNum}
-                </button>
-              ))}
-              
-              <button 
-                className={styles.pageBtn}
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
           </div>
         )}
       </div>

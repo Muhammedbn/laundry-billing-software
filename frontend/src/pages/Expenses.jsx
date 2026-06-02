@@ -14,7 +14,9 @@ export default function Expenses() {
   const [expenses, setExpenses] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedDateRange, setSelectedDateRange] = useState('All');
+  const [selectedDateRange, setSelectedDateRange] = useState('Today');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   const [customCategories, setCustomCategories] = useState([]);
   const [showCustomCategoryInput, setShowCustomCategoryInput] = useState(false);
   const [customCategoryName, setCustomCategoryName] = useState('');
@@ -71,6 +73,9 @@ export default function Expenses() {
   };
 
   const filteredExpenses = React.useMemo(() => {
+    if (selectedDateRange === 'Custom' && (!customStart || !customEnd)) {
+      return [];
+    }
     return expenses.filter(ex => {
       // Category filter
       const matchesCategory = selectedCategory === 'All' || ex.category === selectedCategory;
@@ -99,12 +104,18 @@ export default function Expenses() {
           matchesDate = itemDate.getFullYear() === now.getFullYear() && itemDate.getMonth() === now.getMonth();
         } else if (selectedDateRange === 'This Year') {
           matchesDate = itemDate.getFullYear() === now.getFullYear();
+        } else if (selectedDateRange === 'Custom') {
+          const start = new Date(customStart);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(customEnd);
+          end.setHours(23, 59, 59, 999);
+          matchesDate = itemDate >= start && itemDate <= end;
         }
       }
       
       return matchesCategory && matchesDate;
     });
-  }, [expenses, selectedCategory, selectedDateRange]);
+  }, [expenses, selectedCategory, selectedDateRange, customStart, customEnd]);
 
   const handleDeleteExpense = async (id) => {
     if (!window.confirm("Are you sure you want to delete this expense? This will also remove the corresponding transaction in accounts.")) return;
@@ -300,8 +311,27 @@ export default function Expenses() {
                 <option value="This Week">This Week</option>
                 <option value="This Month">This Month</option>
                 <option value="This Year">This Year</option>
+                <option value="Custom">Custom Range</option>
               </select>
             </div>
+
+            {selectedDateRange === 'Custom' && (
+              <div className={styles.filterWrapper} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.4rem 0.6rem', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
+                <input 
+                  type="date" 
+                  value={customStart} 
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  style={{ border: 'none', outline: 'none', fontSize: '0.85rem', background: 'transparent' }}
+                />
+                <span style={{ fontSize: '0.8rem', color: '#64748B', fontWeight: 600 }}>to</span>
+                <input 
+                  type="date" 
+                  value={customEnd} 
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  style={{ border: 'none', outline: 'none', fontSize: '0.85rem', background: 'transparent' }}
+                />
+              </div>
+            )}
           </div>
         </div>
 

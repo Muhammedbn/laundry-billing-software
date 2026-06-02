@@ -250,6 +250,9 @@ export default function MainLayout() {
         { path: '/reports', label: 'Analytics' },
         { path: '/reports/revenue', label: 'Revenue' },
         { path: '/reports/expenses', label: 'Expenses' },
+        { path: '/reports/tax', label: 'Tax Statements' },
+        { path: '/reports/cancelled', label: 'Cancelled Orders' },
+
       ]
     },
     {
@@ -442,9 +445,9 @@ export default function MainLayout() {
 
         // 2. Record Payment
         await window.electronAPI.dbQuery(
-          `INSERT INTO payments (id, customerId, shopId, amount, method, status, createdAt) 
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [`PAY-QUICK-${Date.now()}`, customer.id, DEFAULT_SHOP_ID, amount, settleMethod, 'SUCCESS', timestamp]
+          `INSERT INTO payments (id, customerId, shopId, amount, method, status, createdAt, isSynced, updatedAt) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+          [`PAY-QUICK-${Date.now()}`, customer.id, DEFAULT_SHOP_ID, amount, settleMethod, 'SUCCESS', timestamp, timestamp]
         );
 
         // 3. Try to settle orders (simplified FIFO)
@@ -498,9 +501,9 @@ export default function MainLayout() {
 
         // 2. Record Payment linked to specific order
         await window.electronAPI.dbQuery(
-          `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [`PAY-QUICK-${Date.now()}-${bill.id}`, bill.customerId, bill.id, DEFAULT_SHOP_ID, amount, settleMethod, 'SUCCESS', timestamp]
+          `INSERT INTO payments (id, customerId, orderId, shopId, amount, method, status, createdAt, isSynced, updatedAt) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+          [`PAY-QUICK-${Date.now()}-${bill.id}`, bill.customerId, bill.id, DEFAULT_SHOP_ID, amount, settleMethod, 'SUCCESS', timestamp, timestamp]
         );
 
         // 3. Update Customer Balance

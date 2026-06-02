@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Upload, CheckCircle, Image as ImageIcon, X, Sliders, Scissors,
   Mail, Phone, Globe, Building2, MapPin, CreditCard, Hash, FileText,
-  Percent, Settings2, Info, Plus, Trash2, Star, DollarSign, Clock, Database, Save, AlertCircle, RefreshCw, Lock
+  Percent, Settings2, Info, Plus, Trash2, Star, DollarSign, Clock, Database, Save, AlertCircle, RefreshCw, Lock, Download, Cpu
 } from 'lucide-react';
 import Cropper from 'react-easy-crop';
 import getCroppedImg from '../utils/cropImage';
@@ -30,7 +30,29 @@ export default function Settings() {
 
   if (!isAuthorized) return null;
 
-  const tabs = ['General', 'Order Workflow', 'Company Info', 'Tax Settings', 'Bill Templates', 'Payment Gateways', 'Maintenance'];
+  const tabs = ['General', 'Order Workflow', 'Company Info', 'Tax Settings', 'Bill Templates', 'Payment Gateways', 'Maintenance', 'Software Update'];
+
+  // Software Update States
+  const [updateStatus, setUpdateStatus] = useState({ type: 'idle' });
+  const [lastCheckTime, setLastCheckTime] = useState(localStorage.getItem('update_last_check') || '');
+
+  useEffect(() => {
+    if (window.electronAPI?.onUpdateStatus) {
+      window.electronAPI.onUpdateStatus((status) => {
+        setUpdateStatus(status);
+        if (status.type === 'checking') {
+          const checkTimeString = new Date().toLocaleString();
+          setLastCheckTime(checkTimeString);
+          localStorage.setItem('update_last_check', checkTimeString);
+        }
+      });
+    }
+    return () => {
+      if (window.electronAPI?.removeUpdateListeners) {
+        window.electronAPI.removeUpdateListeners();
+      }
+    };
+  }, []);
 
   // Cropper States
   const [imageToCrop, setImageToCrop] = useState(null);
@@ -1188,6 +1210,195 @@ export default function Settings() {
                       </p>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'Software Update' && (
+            <div className={styles.profileContainer}>
+              <style>{`
+                @keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+              `}</style>
+              <div className={styles.card} style={{ background: '#FFFFFF', padding: '2.5rem', borderRadius: '16px', border: '1px solid #F1F5F9', boxShadow: '0 4px 20px -2px rgba(148, 163, 184, 0.12)' }}>
+                <div className={styles.cardHeader} style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '2.5rem' }}>
+                  <div style={{ background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)', padding: '1rem', borderRadius: '14px' }}>
+                    <Cpu size={32} color="#2563EB" />
+                  </div>
+                  <div>
+                    <h2 className={styles.cardTitle} style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0F172A', marginBottom: '0.25rem' }}>Software Update</h2>
+                    <p style={{ fontSize: '0.875rem', color: '#64748B' }}>Keep your POS software up to date for the latest features, security, and enhancements.</p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', background: '#F8FAFC', padding: '1.5rem', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ minWidth: '180px' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current Version</span>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1E293B', marginTop: '0.25rem' }}>v1.0.0</div>
+                    </div>
+                    <div style={{ minWidth: '180px' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last Checked</span>
+                      <div style={{ fontSize: '1rem', fontWeight: 600, color: '#334155', marginTop: '0.25rem' }}>
+                        {lastCheckTime || 'Never'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {updateStatus.type === 'idle' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem' }}>
+                      <p style={{ color: '#475569', fontSize: '0.9rem' }}>Click below to query the update server for any pending updates.</p>
+                      <button
+                        className={styles.saveBtn}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#2563EB', padding: '0.75rem 1.5rem' }}
+                        onClick={() => {
+                          if (window.electronAPI?.checkForUpdates) {
+                            window.electronAPI.checkForUpdates();
+                          }
+                        }}
+                      >
+                        <RefreshCw size={18} /> Check for Updates
+                      </button>
+                    </div>
+                  )}
+
+                  {updateStatus.type === 'checking' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '1.5rem', borderRadius: '12px' }}>
+                      <div style={{ animation: 'spin 1.5s linear infinite', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <RefreshCw size={24} color="#2563EB" />
+                      </div>
+                      <div>
+                        <h4 style={{ color: '#1E3A8A', margin: 0 }}>Checking for updates...</h4>
+                        <p style={{ color: '#3B82F6', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>Connecting to remote software repository...</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {updateStatus.type === 'not-available' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '1.5rem', borderRadius: '12px' }}>
+                        <CheckCircle size={24} color="#10B981" />
+                        <div>
+                          <h4 style={{ color: '#065F46', margin: 0 }}>You are up to date!</h4>
+                          <p style={{ color: '#059669', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>This application is currently running the latest version.</p>
+                        </div>
+                      </div>
+                      <button
+                        className={styles.saveBtn}
+                        style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#F1F5F9', color: '#334155', border: '1px solid #CBD5E1', padding: '0.75rem 1.5rem' }}
+                        onClick={() => {
+                          if (window.electronAPI?.checkForUpdates) {
+                            window.electronAPI.checkForUpdates();
+                          }
+                        }}
+                      >
+                        <RefreshCw size={18} /> Check Again
+                      </button>
+                    </div>
+                  )}
+
+                  {updateStatus.type === 'available' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#FFF7ED', border: '1px solid #FFEDD5', padding: '1.5rem', borderRadius: '12px' }}>
+                        <Info size={24} color="#F97316" />
+                        <div>
+                          <h4 style={{ color: '#7C2D12', margin: 0 }}>Update Available: v{updateStatus.version}</h4>
+                          <p style={{ color: '#C2410C', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>A new version of the laundry software has been published and is ready to download.</p>
+                        </div>
+                      </div>
+
+                      {updateStatus.releaseNotes && (
+                        <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '1.5rem', borderRadius: '12px' }}>
+                          <h5 style={{ color: '#334155', margin: '0 0 0.75rem 0', fontWeight: 600 }}>What's New in this Version:</h5>
+                          <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '0.875rem', color: '#475569', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                            {updateStatus.releaseNotes}
+                          </pre>
+                        </div>
+                      )}
+
+                      <button
+                        className={styles.saveBtn}
+                        style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#2563EB', padding: '0.75rem 1.5rem' }}
+                        onClick={() => {
+                          if (window.electronAPI?.downloadUpdate) {
+                            window.electronAPI.downloadUpdate();
+                          }
+                        }}
+                      >
+                        <Download size={18} /> Download & Install Update
+                      </button>
+                    </div>
+                  )}
+
+                  {updateStatus.type === 'downloading' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '2rem', borderRadius: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 600, color: '#334155' }}>Downloading software update...</span>
+                        <span style={{ fontWeight: 700, color: '#2563EB' }}>{updateStatus.progress}%</span>
+                      </div>
+                      
+                      <div style={{ width: '100%', height: '8px', background: '#E2E8F0', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ 
+                          width: `${updateStatus.progress}%`, 
+                          height: '100%', 
+                          background: 'linear-gradient(90deg, #3B82F6 0%, #2563EB 100%)', 
+                          borderRadius: '4px', 
+                          transition: 'width 0.3s ease-out' 
+                        }} />
+                      </div>
+                      <span style={{ fontSize: '0.8rem', color: '#64748B' }}>Please do not close the application or disconnect from the internet.</span>
+                    </div>
+                  )}
+
+                  {updateStatus.type === 'downloaded' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '1.5rem', borderRadius: '12px' }}>
+                        <CheckCircle size={24} color="#10B981" />
+                        <div>
+                          <h4 style={{ color: '#065F46', margin: 0 }}>Download Complete!</h4>
+                          <p style={{ color: '#059669', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>The update was downloaded successfully. A restart is required to apply the update.</p>
+                        </div>
+                      </div>
+
+                      <button
+                        className={styles.saveBtn}
+                        style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#10B981', padding: '0.75rem 1.5rem' }}
+                        onClick={() => {
+                          if (window.electronAPI?.installUpdate) {
+                            window.electronAPI.installUpdate();
+                          }
+                        }}
+                      >
+                        <RefreshCw size={18} /> Restart and Apply Update
+                      </button>
+                    </div>
+                  )}
+
+                  {updateStatus.type === 'error' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#FEF2F2', border: '1px solid #FCA5A5', padding: '1.5rem', borderRadius: '12px' }}>
+                        <AlertCircle size={24} color="#EF4444" />
+                        <div>
+                          <h4 style={{ color: '#991B1B', margin: 0 }}>Update Check Failed</h4>
+                          <p style={{ color: '#B91C1C', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>{updateStatus.message || 'An error occurred while checking for updates.'}</p>
+                        </div>
+                      </div>
+                      <button
+                        className={styles.saveBtn}
+                        style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#2563EB', padding: '0.75rem 1.5rem' }}
+                        onClick={() => {
+                          if (window.electronAPI?.checkForUpdates) {
+                            window.electronAPI.checkForUpdates();
+                          }
+                        }}
+                      >
+                        <RefreshCw size={18} /> Retry Check
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

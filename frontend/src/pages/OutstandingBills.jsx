@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, Filter, DollarSign, Clock, AlertCircle, 
   ChevronRight, ArrowRight, Printer, MessageCircle,
-  CheckCircle, MoreHorizontal, Download, Eye
+  CheckCircle, MoreHorizontal, Download, Eye, Calendar
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../store/SettingsContext';
@@ -20,6 +20,9 @@ export default function OutstandingBills() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('All'); // All, Overdue, Due Soon
   const [globalOutstanding, setGlobalOutstanding] = useState(0);
+  const [dateRange, setDateRange] = useState('Today');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
 
   useEffect(() => {
     fetchOutstandingBills();
@@ -61,22 +64,60 @@ export default function OutstandingBills() {
     return diffDays > overdueDays;
   };
 
-  const filteredBills = bills.filter(bill => {
-    const matchesSearch = 
-      (bill.id || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (bill.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (bill.billNumber || '').toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (filterType === 'Overdue') return matchesSearch && isOverdue(bill);
-    if (filterType === 'Due Soon') {
-      const diffDays = Math.ceil(Math.abs(new Date() - new Date(bill.createdAt)) / (1000 * 60 * 60 * 24));
-      return matchesSearch && diffDays <= 7 && !isOverdue(bill);
+  const getDateBounds = () => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (dateRange === 'Today') {
+      return { from: today, to: new Date(today.getTime() + 86400000 - 1) };
     }
-    return matchesSearch;
-  });
+    if (dateRange === 'This Week') {
+      const day = today.getDay();
+      const start = new Date(today); start.setDate(today.getDate() - day);
+      const end = new Date(start); end.setDate(start.getDate() + 6);
+      return { from: start, to: end };
+    }
+    if (dateRange === 'This Month') {
+      return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59) };
+    }
+    if (dateRange === 'This Year') {
+      return { from: new Date(now.getFullYear(), 0, 1), to: new Date(now.getFullYear(), 11, 31, 23, 59, 59) };
+    }
+    if (dateRange === 'Custom' && customStart && customEnd) {
+      return { from: new Date(customStart), to: new Date(customEnd + 'T23:59:59') };
+    }
+    return null;
+  };
 
-  const totalOutstanding = globalOutstanding || bills.reduce((sum, b) => sum + (b.dueAmount || b.totalAmount || 0), 0);
-  const overdueCount = bills.filter(b => isOverdue(b)).length;
+  const filteredBills = React.useMemo(() => {
+    if (dateRange === 'Custom' && (!customStart || !customEnd)) {
+      return [];
+    }
+    const bounds = getDateBounds();
+    return bills.filter(bill => {
+      const matchesSearch = 
+        (bill.id || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (bill.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (bill.billNumber || '').toLowerCase().includes(searchTerm.toLowerCase());
+      
+      if (!matchesSearch) return false;
+      
+      if (filterType === 'Overdue' && !isOverdue(bill)) return false;
+      if (filterType === 'Due Soon') {
+        const diffDays = Math.ceil(Math.abs(new Date() - new Date(bill.createdAt)) / (1000 * 60 * 60 * 24));
+        if (!(diffDays <= 7 && !isOverdue(bill))) return false;
+      }
+
+      if (bounds && bill.createdAt) {
+        const created = new Date(bill.createdAt);
+        if (created < bounds.from || created > bounds.to) return false;
+      }
+
+      return true;
+    });
+  }, [bills, searchTerm, filterType, dateRange, customStart, customEnd]);
+
+  const totalOutstanding = filteredBills.reduce((sum, b) => sum + (b.dueAmount || b.totalAmount || 0), 0);
+  const overdueCount = filteredBills.filter(b => isOverdue(b)).length;
 
   const handleExportCSV = () => {
     const headers = ['Order ID', 'Bill Number', 'Customer Name', 'Customer Phone', 'Date', 'Status', 'Total Amount', 'Due Amount'];
@@ -173,6 +214,40 @@ export default function OutstandingBills() {
         >
           Due Soon
         </button>
+
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Calendar size={16} color="#64748B" />
+          <select 
+            value={dateRange} 
+            onChange={(e) => setDateRange(e.target.value)}
+            style={{ border: '1px solid #E2E8F0', padding: '0.4rem 0.8rem', borderRadius: '8px', fontWeight: 600, outline: 'none', fontSize: '0.85rem', background: 'white' }}
+          >
+            <option value="All">All Time</option>
+            <option value="Today">Today</option>
+            <option value="This Week">This Week</option>
+            <option value="This Month">This Month</option>
+            <option value="This Year">This Year</option>
+            <option value="Custom">Custom Range</option>
+          </select>
+
+          {dateRange === 'Custom' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <input 
+                type="date" 
+                value={customStart} 
+                onChange={(e) => setCustomStart(e.target.value)}
+                style={{ border: '1px solid #E2E8F0', padding: '0.35rem 0.5rem', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', background: 'white' }}
+              />
+              <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>to</span>
+              <input 
+                type="date" 
+                value={customEnd} 
+                onChange={(e) => setCustomEnd(e.target.value)}
+                style={{ border: '1px solid #E2E8F0', padding: '0.35rem 0.5rem', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', background: 'white' }}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       <div className={styles.tableCard}>

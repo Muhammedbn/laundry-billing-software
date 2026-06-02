@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Search, Plus, Minus, ShoppingBag, Trash2, CheckCircle, 
-  X, ChevronDown, Shirt, Bed, Wind, Layers, 
+  X, ChevronDown, Shirt, Bed, Wind, Layers, Package, 
   Droplet, Zap, Heart, Sparkles, User, CreditCard, Wallet, 
-  Gift, Printer, Receipt, Edit3, UserPlus, Phone, MapPin, MessageCircle, Landmark
+  Gift, Printer, Receipt, Edit3, UserPlus, Phone, MapPin, MessageCircle, Landmark,
+  Calendar, FileText
 } from 'lucide-react';
 import axios from 'axios';
 import { useSettings } from '../store/SettingsContext';
@@ -24,7 +25,13 @@ export default function POS() {
   const [step, setStep] = useState('pos'); // pos, checkout
   const [cart, setCart] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
-  const [serviceConfig, setServiceConfig] = useState({ type: 'wf', addons: [], qty: 1 });
+  const [serviceConfig, setServiceConfig] = useState({ types: ['wf'], addons: [], qty: 1, customPrice: null, description: '' });
+
+  const activeServiceTypes = selectedService ? serviceTypes.filter(t => serviceConfig.types.includes(t.id)) : [];
+  const activeSelectedAddons = selectedService ? addons.filter(a => serviceConfig.addons.includes(a.id)) : [];
+  const activeServiceTypePrice = activeServiceTypes.reduce((sum, t) => sum + t.price, 0);
+  const activeAddonPrice = activeSelectedAddons.reduce((sum, a) => sum + a.price, 0);
+  const activeCalculatedPrice = (selectedService?.price || 0) + activeServiceTypePrice + activeAddonPrice;
   
   useEffect(() => {
     fetchPOSData();
@@ -62,10 +69,20 @@ export default function POS() {
       'Wind': <Wind size={size} />,
       'Droplet': <Droplet size={size} />,
       'Sparkles': <Sparkles size={size} />,
-      'Zap': <Zap size={size} />
+      'Zap': <Zap size={size} />,
+      'Package': <Package size={size} />
     };
     return icons[iconName] || <Shirt size={size} />;
   };
+
+  const getTomorrowDateString = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  };
+
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(getTomorrowDateString());
+  const [specialInstructions, setSpecialInstructions] = useState('');
 
   // Checkout states
   const [paymentMethod, setPaymentMethod] = useState(settings.defaultPaymentMethod?.toLowerCase() || 'cash');
@@ -152,10 +169,6 @@ export default function POS() {
     if (val !== null) setDiscount(parseFloat(val) || 0);
   };
 
-  const handleQuote = () => {
-    alert("Quote generated successfully!");
-  };
-
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
   
   // Calculate total tax by summing per-item tax
@@ -210,36 +223,47 @@ export default function POS() {
 
   const handleServiceClick = (service) => {
     setSelectedService(service);
-    setServiceConfig({ type: 'wf', addons: [], qty: 1 });
+    const defaultType = serviceTypes[0]?.id || 'wf';
+    setServiceConfig({ types: [defaultType], addons: [], qty: 1, customPrice: null, description: '' });
   };
 
   const addToCart = () => {
-    const type = serviceTypes.find(t => t.id === serviceConfig.type);
-    const selectedAddons = addons.filter(a => serviceConfig.addons.includes(a.id));
-    const addonPrice = selectedAddons.reduce((sum, a) => sum + a.price, 0);
+    if (!selectedService) return;
+    
+    if (selectedService.isTemporary && !selectedService.name.trim()) {
+      alert("Please enter a name for the temporary item.");
+      return;
+    }
+    
+    if (!selectedService.isTemporary && activeServiceTypes.length === 0) return;
+    
+    const unitPrice = serviceConfig.customPrice !== null && serviceConfig.customPrice !== '' 
+      ? parseFloat(serviceConfig.customPrice) 
+      : activeCalculatedPrice;
     
     const newItem = {
       id: Date.now().toString(),
       serviceId: selectedService.id,
-      name: selectedService.name,
-      price: type.price + addonPrice,
-      type: type.name,
-      addons: selectedAddons.map(a => a.name),
+      name: selectedService.name.trim(),
+      price: unitPrice,
+      type: selectedService.isTemporary ? 'Custom' : activeServiceTypes.map(t => t.name).join(', '),
+      addons: selectedService.isTemporary ? [] : activeSelectedAddons.map(a => a.name),
       qty: serviceConfig.qty,
-      taxRate: selectedService.taxRate // Store product-wise rate
+      taxRate: selectedService.taxRate || settings.taxRate || 0, // Store product-wise rate
+      description: serviceConfig.description || ''
     };
     
     setCart([...cart, newItem]);
     setSelectedService(null);
+    setItemSearch('');
   };
 
   const getModalPrice = () => {
     if (!selectedService) return 0;
-    const type = serviceTypes.find(t => t.id === serviceConfig.type);
-    const selectedAddons = addons.filter(a => serviceConfig.addons.includes(a.id));
-    const addonPrice = selectedAddons.reduce((sum, a) => sum + a.price, 0);
-    const basePrice = type ? type.price : 0;
-    return (basePrice + addonPrice) * serviceConfig.qty;
+    const unitPrice = serviceConfig.customPrice !== null && serviceConfig.customPrice !== '' 
+      ? parseFloat(serviceConfig.customPrice) 
+      : activeCalculatedPrice;
+    return unitPrice * serviceConfig.qty;
   };
 
   // Helper to format currency
@@ -262,6 +286,21 @@ export default function POS() {
     }
   };
 
+  const toggleServiceType = (id) => {
+    setServiceConfig(prev => {
+      const isSelected = prev.types.includes(id);
+      if (isSelected && prev.types.length <= 1) {
+        return prev;
+      }
+      return {
+        ...prev,
+        types: isSelected
+          ? prev.types.filter(t => t !== id)
+          : [...prev.types, id]
+      };
+    });
+  };
+
   const toggleAddon = (id) => {
     setServiceConfig(prev => ({
       ...prev,
@@ -278,8 +317,8 @@ export default function POS() {
     if (window.electronAPI?.dbQuery) {
       try {
         await window.electronAPI.dbQuery(
-          `INSERT INTO orders (id, shopId, billNumber, branchId, customerId, status, totalAmount, paidAmount, dueAmount, paymentStatus, items, statusHistory, createdAt, isSynced, updatedAt, paymentMethod) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO orders (id, shopId, billNumber, branchId, customerId, status, totalAmount, paidAmount, dueAmount, paymentStatus, items, statusHistory, createdAt, isSynced, updatedAt, paymentMethod, expectedDeliveryDate, specialInstructions) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             orderId,
             DEFAULT_SHOP_ID,
@@ -296,7 +335,9 @@ export default function POS() {
             new Date().toISOString(),
             0,
             new Date().toISOString(),
-            paymentMethod === 'cash' ? PAYMENT_METHODS.CASH : (paymentMethod === 'card' ? PAYMENT_METHODS.CARD : (paymentMethod === 'credit' ? PAYMENT_METHODS.CREDIT : PAYMENT_METHODS.UPI))
+            paymentMethod === 'cash' ? PAYMENT_METHODS.CASH : (paymentMethod === 'card' ? PAYMENT_METHODS.CARD : (paymentMethod === 'credit' ? PAYMENT_METHODS.CREDIT : PAYMENT_METHODS.UPI)),
+            expectedDeliveryDate,
+            specialInstructions
           ]
         );
 
@@ -317,7 +358,9 @@ export default function POS() {
             paymentStatus: paymentMethod === 'credit' ? PAYMENT_STATUS.CREDIT : PAYMENT_STATUS.PAID,
             paymentMethod: paymentMethod === 'cash' ? PAYMENT_METHODS.CASH : (paymentMethod === 'card' ? PAYMENT_METHODS.CARD : (paymentMethod === 'credit' ? PAYMENT_METHODS.CREDIT : PAYMENT_METHODS.UPI)),
             items: cart,
-            statusHistory: [{ status: paymentMethod === 'credit' ? ORDER_STATUS.CREDIT : ORDER_STATUS.CONFIRMED, updatedBy: 'POS System', timestamp: new Date().toISOString() }]
+            statusHistory: [{ status: paymentMethod === 'credit' ? ORDER_STATUS.CREDIT : ORDER_STATUS.CONFIRMED, updatedBy: 'POS System', timestamp: new Date().toISOString() }],
+            expectedDeliveryDate,
+            specialInstructions
           });
         } catch (syncErr) {
           console.warn('Backend sync failed, but local order saved:', syncErr);
@@ -339,7 +382,9 @@ export default function POS() {
             paymentStatus: paymentMethod === 'credit' ? PAYMENT_STATUS.CREDIT : PAYMENT_STATUS.PAID,
             paymentMethod: paymentMethod === 'cash' ? PAYMENT_METHODS.CASH : (paymentMethod === 'card' ? PAYMENT_METHODS.CARD : (paymentMethod === 'credit' ? PAYMENT_METHODS.CREDIT : PAYMENT_METHODS.UPI)),
             items: cart,
-            statusHistory: [{ status: paymentMethod === 'credit' ? ORDER_STATUS.CREDIT : ORDER_STATUS.CONFIRMED, updatedBy: 'POS System', timestamp: new Date().toISOString() }]
+            statusHistory: [{ status: paymentMethod === 'credit' ? ORDER_STATUS.CREDIT : ORDER_STATUS.CONFIRMED, updatedBy: 'POS System', timestamp: new Date().toISOString() }],
+            expectedDeliveryDate,
+            specialInstructions
           } 
         }));
 
@@ -390,8 +435,8 @@ export default function POS() {
       try {
         await window.electronAPI.dbQuery(
           `INSERT INTO orders 
-           (id, shopId, billNumber, branchId, customerId, status, totalAmount, paidAmount, dueAmount, items, statusHistory, createdAt, updatedAt, paymentStatus, isSynced, paymentMethod) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, shopId, billNumber, branchId, customerId, status, totalAmount, paidAmount, dueAmount, items, statusHistory, createdAt, updatedAt, paymentStatus, isSynced, paymentMethod, expectedDeliveryDate, specialInstructions) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             orderId,
             DEFAULT_SHOP_ID,
@@ -408,7 +453,9 @@ export default function POS() {
             new Date().toISOString(),
             PAYMENT_STATUS.CREDIT,
             0,
-            PAYMENT_METHODS.CREDIT
+            PAYMENT_METHODS.CREDIT,
+            expectedDeliveryDate,
+            specialInstructions
           ]
         );
 
@@ -437,7 +484,9 @@ export default function POS() {
             paymentStatus: PAYMENT_STATUS.CREDIT,
             paymentMethod: PAYMENT_METHODS.CREDIT,
             items: cart,
-            statusHistory: [{ status: ORDER_STATUS.PAYMENT_PENDING, updatedBy: 'POS System', timestamp: new Date().toISOString() }]
+            statusHistory: [{ status: ORDER_STATUS.PAYMENT_PENDING, updatedBy: 'POS System', timestamp: new Date().toISOString() }],
+            expectedDeliveryDate,
+            specialInstructions
           } 
         }));
 
@@ -458,7 +507,9 @@ export default function POS() {
             paymentStatus: PAYMENT_STATUS.CREDIT,
             paymentMethod: PAYMENT_METHODS.CREDIT.toUpperCase(),
             items: cart,
-            statusHistory: [{ status: ORDER_STATUS.PAYMENT_PENDING, updatedBy: 'POS System', timestamp: new Date().toISOString() }]
+            statusHistory: [{ status: ORDER_STATUS.PAYMENT_PENDING, updatedBy: 'POS System', timestamp: new Date().toISOString() }],
+            expectedDeliveryDate,
+            specialInstructions
           });
         } catch (syncErr) {
           console.warn('Backend sync failed, but local order saved:', syncErr);
@@ -482,6 +533,8 @@ export default function POS() {
         
         setShowSuccessModal(true);
         setCart([]);
+        setExpectedDeliveryDate(getTomorrowDateString());
+        setSpecialInstructions('');
       } catch (err) {
         console.error("Failed to save order:", err);
       }
@@ -516,6 +569,11 @@ export default function POS() {
                   <span className={styles.cartItemName}>{item.name}</span>
                   <span className={styles.cartItemPrice}><CurrencySymbol size={14} /> {item.price.toFixed(2)}</span>
                   <span className={styles.cartItemMeta}>{item.type.toUpperCase()}</span>
+                  {item.description && (
+                    <span style={{ fontSize: '0.75rem', color: '#DC2626', fontWeight: 600, marginTop: '0.15rem' }}>
+                      ⚠️ Damage Notes: {item.description}
+                    </span>
+                  )}
                   {item.addons && item.addons.length > 0 && (
                     <span className={styles.cartItemAddons}>
                       + {item.addons.join(', ')}
@@ -693,6 +751,10 @@ export default function POS() {
               <span className={styles.itemPrice}><CurrencySymbol size={16} /> {service.price.toFixed(2)}</span>
             </div>
           ))}
+          <div className={`${styles.itemCard} ${styles.addItemCard}`} style={{ borderStyle: 'solid', borderColor: '#3B82F6', background: '#EFF6FF', cursor: 'pointer' }} onClick={() => handleServiceClick({ id: 'temp-' + Date.now(), name: '', price: 0, icon: 'Package', isTemporary: true })}>
+            <Plus size={32} color="#2563EB" />
+            <span style={{ fontWeight: 800, fontSize: '0.8rem', color: '#2563EB', marginTop: '0.5rem' }}>TEMPORARY ITEM</span>
+          </div>
           <div className={`${styles.itemCard} ${styles.addItemCard}`} onClick={() => navigate('/services')}>
             <Plus size={32} color="#CBD5E1" />
           </div>
@@ -769,7 +831,35 @@ export default function POS() {
               )}
             </div>
           </div>
-          <Trash2 size={18} className={styles.clearCart} onClick={() => setCart([])} />
+          <Trash2 size={18} className={styles.clearCart} onClick={() => { setCart([]); setExpectedDeliveryDate(getTomorrowDateString()); setSpecialInstructions(''); }} />
+        </div>
+
+        <div className={styles.cartMetadata}>
+          <div className={styles.metadataRow}>
+            <label className={styles.metadataLabel}>
+              <Calendar size={13} style={{ marginRight: '4px' }} />
+              Expected Delivery Date
+            </label>
+            <input 
+              type="date" 
+              className={styles.metadataInput}
+              value={expectedDeliveryDate}
+              onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+            />
+          </div>
+          <div className={styles.metadataRow}>
+            <label className={styles.metadataLabel}>
+              <FileText size={13} style={{ marginRight: '4px' }} />
+              ⚠️ Special Instructions
+            </label>
+            <input 
+              type="text" 
+              className={styles.metadataInput}
+              placeholder="e.g. Starch, hang, handle with care..."
+              value={specialInstructions}
+              onChange={(e) => setSpecialInstructions(e.target.value)}
+            />
+          </div>
         </div>
 
         <div className={styles.cartItems}>
@@ -781,18 +871,30 @@ export default function POS() {
               <div className={styles.cartItemDetails}>
                 <span className={styles.cartItemName}>{item.name}</span>
                 <span className={styles.cartItemMeta}>{item.type} • <CurrencySymbol size={10} /> {item.price.toFixed(2)}</span>
+                {item.description && (
+                  <span className={styles.cartItemRemarks}>
+                    ⚠️ Fabric Notes: {item.description}
+                  </span>
+                )}
                 {item.addons && item.addons.length > 0 && (
                   <span className={styles.cartItemAddons}>
                     + {item.addons.join(', ')}
                   </span>
                 )}
               </div>
-              <div className={styles.qtyControl}>
-                <button className={styles.qtyBtn} onClick={() => updateCartQty(idx, -1)}><Minus size={14} /></button>
-                <span style={{ fontWeight: 800, fontSize: '0.95rem', minWidth: '1.5rem', textAlign: 'center' }}>{item.qty}</span>
-                <button className={styles.qtyBtn} onClick={() => updateCartQty(idx, 1)}><Plus size={14} /></button>
+              <div className={styles.cartItemActions}>
+                <div className={styles.qtyControl}>
+                  <button className={styles.qtyBtn} onClick={() => updateCartQty(idx, -1)} title="Decrease quantity"><Minus size={12} /></button>
+                  <span className={styles.qtyValue}>{item.qty}</span>
+                  <button className={styles.qtyBtn} onClick={() => updateCartQty(idx, 1)} title="Increase quantity"><Plus size={12} /></button>
+                </div>
+                <div className={styles.cartItemRight}>
+                  <span className={styles.cartItemPrice}><CurrencySymbol size={12} /> {(item.price * item.qty).toFixed(2)}</span>
+                  <button className={styles.cartItemDeleteBtn} onClick={() => removeCartItem(idx)} title="Remove item">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
-              <div className={styles.cartItemPrice}><CurrencySymbol size={14} /> {(item.price * item.qty).toFixed(2)}</div>
             </div>
           ))}
         </div>
@@ -810,7 +912,6 @@ export default function POS() {
           
           <div className={styles.cartActions}>
             <button className={styles.secondaryBtn} onClick={handleDiscount}><Receipt size={18} /> Discount</button>
-            <button className={styles.secondaryBtn} onClick={handleQuote}><Receipt size={18} /> Quote</button>
             {selectedCustomer && selectedCustomer.balance > 0 && (
               <button 
                 className={styles.overdueBtn} 
@@ -845,68 +946,175 @@ export default function POS() {
       {/* Service Modal */}
       {selectedService && (
         <div className={styles.modalOverlay}>
-          <div className={styles.modal}>
+          <div className={`${styles.modal} ${selectedService.isTemporary ? styles.tempModal : ''}`}>
             <div className={styles.modalHeader}>
               <div className={styles.modalTitle}>
-                <h2>Select Service - {selectedService.name}</h2>
-                <p>Configure your treatment and options</p>
+                <div className={styles.modalHeaderIcon}>
+                  {selectedService.isTemporary ? <Package size={24} /> : getIcon(selectedService.icon, 24)}
+                </div>
+                <div>
+                  <h2>{selectedService.isTemporary ? 'Add Custom Temporary Item' : selectedService.name}</h2>
+                  <p>{selectedService.isTemporary ? 'Enter name, price, and options' : selectedService.category || 'Configure Service Options'}</p>
+                </div>
               </div>
-              <X size={24} className={styles.closeBtn} onClick={() => setSelectedService(null)} />
+              <button className={styles.modalCloseBtn} onClick={() => setSelectedService(null)} aria-label="Close modal">
+                <X size={20} />
+              </button>
             </div>
             
             <div className={styles.modalBody}>
-              <div>
-                <h3 className={styles.modalSectionTitle}>Service Type</h3>
-                <div className={styles.optionGrid}>
-                  {serviceTypes.map(type => (
-                    <div 
-                      key={type.id} 
-                      className={`${styles.optionCard} ${serviceConfig.type === type.id ? styles.active : ''}`}
-                      onClick={() => setServiceConfig(prev => ({ ...prev, type: type.id }))}
-                    >
-                      <div className={styles.optionIcon}>{getIcon(type.icon, 18)}</div>
-                      <div className={styles.optionDetails}>
-                        <span className={styles.optionName}>{type.name}</span>
-                        <span className={styles.optionPrice}><CurrencySymbol size={10} /> {type.price.toFixed(2)} / item</span>
-                      </div>
+              {selectedService.isTemporary && (
+                <div className={styles.tempFormGroup}>
+                  <label htmlFor="tempItemName">Item Name / Description</label>
+                  <input 
+                    id="tempItemName"
+                    type="text" 
+                    placeholder="e.g. Special Silk Dress, Custom Alteration..." 
+                    value={selectedService.name} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedService(prev => ({ ...prev, name: val }));
+                    }}
+                    className={styles.tempInput}
+                  />
+                </div>
+              )}
+
+              {!selectedService.isTemporary && (
+                <>
+                  <div className={styles.modalSection}>
+                    <h3 className={styles.modalSectionTitle}>Treatment / Service Type</h3>
+                    <div className={styles.serviceTypeGrid}>
+                      {serviceTypes.map(type => {
+                        const isSelected = serviceConfig.types.includes(type.id);
+                        return (
+                          <div 
+                            key={type.id} 
+                            className={`${styles.serviceTypeCard} ${isSelected ? styles.active : ''}`}
+                            onClick={() => toggleServiceType(type.id)}
+                          >
+                            <div className={styles.selectionIndicator}>
+                              <div className={styles.checkboxOutline}>
+                                {isSelected && <CheckCircle size={10} className={styles.checkIconMini} />}
+                              </div>
+                            </div>
+                            <div className={styles.serviceTypeIcon}>{getIcon(type.icon, 16)}</div>
+                            <span className={styles.serviceTypeName}>{type.name}</span>
+                            <span className={styles.serviceTypePrice}>+ {formatCurrency(type.price)}</span>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
+                  </div>
+
+                  <div className={styles.modalSection}>
+                    <h3 className={styles.modalSectionTitle}>Add-ons & Enhancements</h3>
+                    <div className={styles.addonChipsContainer}>
+                      {addons.map(addon => {
+                        const isSelected = serviceConfig.addons.includes(addon.id);
+                        return (
+                          <div 
+                            key={addon.id} 
+                            className={`${styles.addonChip} ${isSelected ? styles.active : ''}`}
+                            onClick={() => toggleAddon(addon.id)}
+                          >
+                            <div className={styles.addonCheckbox}>
+                              {isSelected && <CheckCircle size={12} className={styles.checkIconMini} />}
+                            </div>
+                            <span className={styles.addonChipName}>{addon.name}</span>
+                            <span className={styles.addonChipPrice}>+{formatCurrency(addon.price)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className={styles.gridTwoColumns}>
+                <div className={styles.modalSection}>
+                  <label className={styles.fieldLabel} htmlFor="customPriceInput">
+                    <span>Unit Price Override</span>
+                    <span className={styles.fieldSub}>
+                      {selectedService.isTemporary ? 'Set custom item price' : `Base + options: ${formatCurrency(activeCalculatedPrice)}`}
+                    </span>
+                  </label>
+                  <div className={styles.priceInputWrapper}>
+                    <div className={styles.currencyPrefix}>
+                      <CurrencySymbol size={16} />
+                    </div>
+                    <input 
+                      id="customPriceInput"
+                      type="number" 
+                      step="0.01"
+                      min="0"
+                      placeholder={activeCalculatedPrice.toFixed(2)}
+                      value={serviceConfig.customPrice ?? ''} 
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setServiceConfig(prev => ({ ...prev, customPrice: val === '' ? null : val }));
+                      }}
+                      className={styles.priceInput}
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.modalSection}>
+                  <label className={styles.fieldLabel} htmlFor="qtyInput">
+                    <span>Quantity</span>
+                    <span className={styles.fieldSub}>Number of identical items</span>
+                  </label>
+                  <div className={styles.qtyControlLarge}>
+                    <button 
+                      type="button" 
+                      className={styles.qtyLargeBtn} 
+                      onClick={() => setServiceConfig(prev => ({ ...prev, qty: Math.max(1, prev.qty - 1) }))}
+                    >
+                      <Minus size={16} />
+                    </button>
+                    <input 
+                      id="qtyInput"
+                      type="number" 
+                      value={serviceConfig.qty} 
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setServiceConfig(prev => ({ ...prev, qty: isNaN(val) || val < 1 ? 1 : val }));
+                      }}
+                      className={styles.qtyLargeInput}
+                    />
+                    <button 
+                      type="button" 
+                      className={`${styles.qtyLargeBtn} ${styles.primary}`} 
+                      onClick={() => setServiceConfig(prev => ({ ...prev, qty: prev.qty + 1 }))}
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <h3 className={styles.modalSectionTitle}>Add-ons</h3>
-                <div className={styles.optionGrid}>
-                  {addons.map(addon => (
-                    <div 
-                      key={addon.id} 
-                      className={`${styles.optionCard} ${serviceConfig.addons.includes(addon.id) ? styles.active : ''}`}
-                      onClick={() => toggleAddon(addon.id)}
-                    >
-                      <div className={styles.optionIcon}>{getIcon(addon.icon, 14)}</div>
-                      <span className={styles.optionName}>{addon.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className={styles.qtySection}>
-                <div className={styles.qtyLabel}>
-                  <span style={{ fontWeight: 800, fontSize: '0.8rem' }}>QUANTITY</span>
-                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>Number of identical items</span>
-                </div>
-                <div className={styles.qtyLarge}>
-                  <button className={styles.qtyControlBtn} onClick={() => setServiceConfig(prev => ({ ...prev, qty: Math.max(1, prev.qty - 1) }))}>-</button>
-                  <input type="text" value={serviceConfig.qty.toString().padStart(2, '0')} readOnly />
-                  <button className={`${styles.qtyControlBtn} ${styles.qtyControlBtnPrimary}`} onClick={() => setServiceConfig(prev => ({ ...prev, qty: prev.qty + 1 }))}>+</button>
-                </div>
+              <div className={styles.modalSection}>
+                <label className={styles.fieldLabel} htmlFor="damageRemarks">
+                  <span>Damage Remarks / Fabric Notes</span>
+                  <span className={styles.fieldSub}>Describe stains, tears, fading, or special requirements</span>
+                </label>
+                <textarea 
+                  id="damageRemarks"
+                  placeholder="e.g., Small yellow stain on collar, missing middle button, handle with care..." 
+                  value={serviceConfig.description || ''} 
+                  onChange={(e) => setServiceConfig(prev => ({ ...prev, description: e.target.value }))}
+                  className={styles.remarksTextarea}
+                />
               </div>
             </div>
 
-            <div className={styles.modalFooter}>
-              <button className={styles.secondaryBtn} onClick={() => setSelectedService(null)}>Cancel</button>
-              <button className={styles.submitBtn} onClick={addToCart}>
-                Add to Order • ${getModalPrice().toFixed(2)}
+            <div className={styles.modalFooterRedesign}>
+              <button className={styles.modalCancelBtn} onClick={() => setSelectedService(null)}>
+                Cancel
+              </button>
+              <button className={styles.modalSubmitBtn} onClick={addToCart}>
+                <ShoppingBag size={18} />
+                <span>Add to Cart • {formatCurrency(getModalPrice())}</span>
               </button>
             </div>
           </div>
