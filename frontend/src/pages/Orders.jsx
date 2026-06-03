@@ -1107,12 +1107,21 @@ export default function Orders({ isPendingView = false }) {
                             : (selectedOrder.items || []);
                         } catch(e) { console.error("Failed to parse items", e); }
                         
-                        return (Array.isArray(items) ? items : []).map((item, i) => (
-                          <div key={i} className={styles.orderItem}>
-                            <span>{item.qty} x {item.name} {item.type ? `(${t(item.type.toLowerCase(), settings.language)})` : ''}</span>
-                            <span><CurrencySymbol size={12} /> {((item.price || 0) * (item.qty || 1)).toFixed(2)}</span>
-                          </div>
-                        ));
+                        return (Array.isArray(items) ? items : []).map((item, i) => {
+                          // Build treatment label from types array or fallback to type string
+                          let treatmentLabel = '';
+                          if (item.types && Array.isArray(item.types) && item.types.length > 0) {
+                            treatmentLabel = item.types.map(tp => tp.name).join(' + ');
+                          } else if (item.type) {
+                            treatmentLabel = item.type;
+                          }
+                          return (
+                            <div key={i} className={styles.orderItem}>
+                              <span>{item.qty} x {item.name}{treatmentLabel ? ` (${treatmentLabel})` : ''}</span>
+                              <span><CurrencySymbol size={12} /> {((item.price || 0) * (item.qty || 1)).toFixed(2)}</span>
+                            </div>
+                          );
+                        });
                       })()}
                       <div className={styles.orderTotal}>
                         <span>

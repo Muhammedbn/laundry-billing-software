@@ -154,8 +154,9 @@ export default function Reports() {
             const items = JSON.parse(order.items || '[]');
             items.forEach(item => {
               const cat = item.category || 'Standard';
-              categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
-              categoryRevenue[cat] = (categoryRevenue[cat] || 0) + (item.price * item.quantity);
+              const itemQty = item.qty !== undefined ? item.qty : (item.quantity !== undefined ? item.quantity : 1);
+              categoryCounts[cat] = (categoryCounts[cat] || 0) + itemQty;
+              categoryRevenue[cat] = (categoryRevenue[cat] || 0) + (item.price * itemQty);
             });
           });
 

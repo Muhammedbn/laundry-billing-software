@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ShoppingCart, Users, ClipboardList, Settings, Layers,
   BarChart3, Zap, Plus, Search, Bell, HelpCircle, LifeBuoy, Wifi, WifiOff, RefreshCw, Activity, LogOut, Wallet,
   DollarSign, X, CheckCircle, CreditCard, ShoppingBag, Trash2, Building2, Hash, FileText,
-  AlertTriangle, ShieldCheck, Clock, Package, Truck, MessageCircle, Phone
+  AlertTriangle, ShieldCheck, Clock, Package, Truck, MessageCircle, Phone, Cpu
 } from 'lucide-react';
 import axios from 'axios';
 import { syncData } from '../services/syncService';
@@ -17,6 +17,11 @@ const API_BASE = API_BASE_URL;
 
 export default function MainLayout() {
   const { settings, updateSettings } = useSettings();
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
   const [isOnline, setIsOnline] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -37,6 +42,10 @@ export default function MainLayout() {
   const [settleAmount, setSettleAmount] = useState('');
   const [settleMethod, setSettleMethod] = useState('CASH');
   const [logoClicks, setLogoClicks] = useState(0);
+
+  // Software Update States
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState(null);
 
   // Header Dropdown States
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -68,6 +77,7 @@ export default function MainLayout() {
     }
   }, [location.pathname]);
 
+  // 1. Connection status monitoring
   useEffect(() => {
     const checkStatus = async () => {
       if (window.electronAPI) {
@@ -80,42 +90,94 @@ export default function MainLayout() {
 
     checkStatus();
     const interval = setInterval(checkStatus, 5000);
-    const syncInterval = setInterval(() => { if (isOnline) handleSync(); }, 60000);
 
-    // Dedicated Local Auto-Backup Interval
-    let backupInterval = null;
-    const intervalTime = (settings.autoBackupInterval ?? 60) * 1000;
-    if (settings.autoBackupPath && settings.autoBackupInterval !== 0 && window.electronAPI?.silentBackup) {
-      backupInterval = setInterval(async () => {
-        console.log('Auto-backing up to USB...');
-        const result = await window.electronAPI.silentBackup(settings.autoBackupPath);
-        if (result.success) {
-          updateSettings({ lastBackupTime: new Date().toLocaleString() });
-        }
-      }, intervalTime);
-    }
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
-    window.addEventListener('online', () => setIsOnline(true));
-    window.addEventListener('offline', () => setIsOnline(false));
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
     return () => {
       clearInterval(interval);
-      clearInterval(syncInterval);
-      if (backupInterval) clearInterval(backupInterval);
-      window.removeEventListener('online', () => setIsOnline(true));
-      window.removeEventListener('offline', () => setIsOnline(false));
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
-  }, [isOnline, settings.autoBackupPath, settings.autoBackupInterval]);
+  }, []);
+
+  // 2. Synchronization Interval (Runs every 60 seconds when online)
+  useEffect(() => {
+    if (!isOnline) return;
+    const syncInterval = setInterval(() => {
+      handleSync();
+    }, 60000);
+    return () => clearInterval(syncInterval);
+  }, [isOnline]);
+
+  // Software Update Checker and Listener Effect
+  useEffect(() => {
+    const handleGlobalUpdate = (event, status) => {
+      if (status.type === 'available') {
+        // If we are already on settings and looking at Software Update, do not pop up modal
+        const searchParams = new URLSearchParams(location.search);
+        const isAtSettingsUpdate = location.pathname === '/settings' && searchParams.get('tab') === 'Software Update';
+        if (!isAtSettingsUpdate) {
+          setUpdateInfo(status);
+          setShowUpdateModal(true);
+        }
+      }
+    };
+
+    if (window.electronAPI?.onUpdateStatus) {
+      window.electronAPI.onUpdateStatus(handleGlobalUpdate);
+    }
+
+    // Auto-check for updates 3 seconds after startup
+    const timer = setTimeout(() => {
+      if (window.electronAPI?.checkForUpdates) {
+        window.electronAPI.checkForUpdates();
+      }
+    }, 3000);
+
+    return () => {
+      clearTimeout(timer);
+      if (window.electronAPI?.offUpdateStatus) {
+        window.electronAPI.offUpdateStatus(handleGlobalUpdate);
+      }
+    };
+  }, [location.pathname, location.search]);
+
+  // 3. Dedicated Local Auto-Backup Interval (Recreated when backup settings change)
+  useEffect(() => {
+    const currentSettings = settingsRef.current;
+    if (!currentSettings.autoBackupPath || currentSettings.autoBackupInterval === 0 || !window.electronAPI?.silentBackup) {
+      return;
+    }
+
+    const intervalTime = currentSettings.autoBackupInterval * 1000;
+    console.log('Setting up auto-backup interval:', intervalTime, 'ms');
+
+    const backupInterval = setInterval(async () => {
+      const activeSettings = settingsRef.current;
+      console.log('Auto-backing up to USB path:', activeSettings.autoBackupPath);
+      const result = await window.electronAPI.silentBackup(activeSettings.autoBackupPath);
+      if (result.success) {
+        updateSettings({ lastBackupTime: new Date().toLocaleString() });
+      }
+    }, intervalTime);
+
+    return () => clearInterval(backupInterval);
+  }, [settings.autoBackupPath, settings.autoBackupInterval]);
 
   const handleSync = async () => {
     if (!isOnline || isSyncing) return;
     setIsSyncing(true);
     await syncData();
 
-    // Auto-backup to USB/Folder if configured
-    if (settings.autoBackupPath && window.electronAPI?.silentBackup) {
-      console.log('Performing auto-backup to:', settings.autoBackupPath);
-      await window.electronAPI.silentBackup(settings.autoBackupPath);
+    // Auto-backup to USB/Folder if configured (read from settingsRef to avoid stale path)
+    const currentSettings = settingsRef.current;
+    if (currentSettings.autoBackupPath && window.electronAPI?.silentBackup) {
+      console.log('Performing auto-backup to:', currentSettings.autoBackupPath);
+      await window.electronAPI.silentBackup(currentSettings.autoBackupPath);
     }
 
     setIsSyncing(false);
@@ -211,7 +273,8 @@ export default function MainLayout() {
       subItems: [
         { path: '/orders', label: 'All Orders' },
         { path: '/orders/pending', label: 'Pending Payments' },
-        { path: '/orders/deleted', label: 'Deleted Orders', roleOnly: ['manager', 'super_admin'] },
+        { path: '/orders/deleted', label: 'Deleted Orders' },
+        { path: '/reports/cancelled', label: 'Cancelled Orders' },
       ]
     },
     {
@@ -223,17 +286,7 @@ export default function MainLayout() {
         { path: '/reports/customer-statement', label: 'Customer Statement' },
       ]
     },
-    {
-      label: 'Services',
-      icon: Layers,
-      permissionKey: 'services',
-      subItems: [
-        { path: '/services', label: 'Overview' },
-        { path: '/services/list', label: 'Service List' },
-        { path: '/services/type', label: 'Service Type' },
-        { path: '/services/addons', label: 'Add-ons' },
-      ]
-    },
+    { path: '/services', label: 'Services', icon: Layers, permissionKey: 'services' },
     {
       label: 'Settle Bill',
       icon: DollarSign,
@@ -252,8 +305,7 @@ export default function MainLayout() {
         { path: '/reports/revenue', label: 'Revenue' },
         { path: '/reports/expenses', label: 'Expenses' },
         { path: '/reports/tax', label: 'Tax Statements' },
-        { path: '/reports/cancelled', label: 'Cancelled Orders' },
-
+        { path: '/reports/daily-tax', label: 'Daily Tax Report' },
       ]
     },
     {
@@ -1041,6 +1093,63 @@ export default function MainLayout() {
               ) : settleSearch.length >= 2 && quickSettleResults.length === 0 ? (
                 <div className={styles.noOrder}>No matching customer or bill found</div>
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Software Update Notification Modal */}
+      {showUpdateModal && updateInfo && (
+        <div className={styles.modalOverlay} style={{ zIndex: 11000 }}>
+          <div className={styles.quickModal} style={{ width: '460px', overflow: 'hidden' }}>
+            <div className={styles.modalHeader} style={{ background: 'linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%)', borderBottom: '1px solid #E2E8F0', padding: '1.5rem 2rem' }}>
+              <div className={styles.titleWithIcon}>
+                <Cpu color="#2563EB" size={24} style={{ animation: 'pulse 2s infinite' }} />
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0F172A' }}>Software Update Available</h2>
+              </div>
+              <button 
+                className={styles.closeBtn} 
+                onClick={() => setShowUpdateModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className={styles.modalBody} style={{ padding: '2rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <p style={{ fontSize: '0.95rem', color: '#334155', lineHeight: '1.6', margin: 0 }}>
+                  A new version of the Laundry Billing system (<strong>v{updateInfo.version}</strong>) has been published and is ready to install.
+                </p>
+
+                {updateInfo.releaseNotes && (
+                  <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '1.25rem', borderRadius: '12px', maxHeight: '180px', overflowY: 'auto' }}>
+                    <h5 style={{ color: '#475569', margin: '0 0 0.5rem 0', fontWeight: 700, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Release Notes:</h5>
+                    <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '0.85rem', color: '#475569', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                      {updateInfo.releaseNotes}
+                    </pre>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                  <button
+                    className={styles.newOrderBtn}
+                    style={{ background: '#F1F5F9', color: '#475569', border: '1px solid #E2E8F0', flex: 1, padding: '0.75rem', borderRadius: '10px', fontWeight: 700, cursor: 'pointer', boxShadow: 'none' }}
+                    onClick={() => setShowUpdateModal(false)}
+                  >
+                    Remind Later
+                  </button>
+                  <button
+                    className={styles.newOrderBtn}
+                    style={{ background: '#2563EB', color: 'white', flex: 1, padding: '0.75rem', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
+                    onClick={() => {
+                      setShowUpdateModal(false);
+                      navigate('/settings?tab=Software Update');
+                    }}
+                  >
+                    Update Now
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

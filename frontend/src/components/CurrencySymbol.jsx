@@ -16,7 +16,7 @@ export default function CurrencySymbol({ size = 16, className = "" }) {
         display: 'inline-block'
       }}
     >
-      {(settings && settings.currencySymbol !== undefined && settings.currencySymbol !== null && settings.currencySymbol !== '') ? settings.currencySymbol : 'AED'}
+      {settings?.currencySymbol || 'د.إ'}
     </span>
   );
 }

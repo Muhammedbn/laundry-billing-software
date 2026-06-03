@@ -279,6 +279,26 @@ function initDB(appPath) {
     if (!serviceCols.some(col => col.name === 'image')) {
       db.exec("ALTER TABLE services ADD COLUMN image TEXT;");
     }
+    if (!serviceCols.some(col => col.name === 'pricing')) {
+      db.exec("ALTER TABLE services ADD COLUMN pricing TEXT DEFAULT '[]';");
+      
+      // Auto-migrate legacy services
+      try {
+        const existingTypes = db.prepare("SELECT id FROM service_types").all();
+        const allServices = db.prepare("SELECT id, price FROM services").all();
+        const updateStmt = db.prepare("UPDATE services SET pricing = ? WHERE id = ?");
+        for (const s of allServices) {
+          const defaultPricing = existingTypes.map(t => ({
+            serviceTypeId: t.id,
+            price: s.price || 0
+          }));
+          updateStmt.run(JSON.stringify(defaultPricing), s.id);
+        }
+        console.log(`Auto-migrated ${allServices.length} legacy services with pricing data.`);
+      } catch (migrateErr) {
+        console.error("Auto-migration of services failed:", migrateErr);
+      }
+    }
     // Data Healer: Run on init
     runDataHealer(db);
   } catch (err) {

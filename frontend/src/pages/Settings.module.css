@@ -34,6 +34,13 @@
   border-bottom: 1px solid #E2E8F0;
   gap: 2rem;
   margin-top: 1rem;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
@@ -44,6 +51,7 @@
   cursor: pointer;
   position: relative;
   transition: color 0.2s;
+  flex-shrink: 0;
 }
 
 .tab.active {

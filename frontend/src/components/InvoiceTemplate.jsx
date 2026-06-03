@@ -93,12 +93,21 @@ export default function InvoiceTemplate({ order, settings, isPreview = false, on
         const newTotal = computedTotal;
         const diff = newTotal - oldTotal;
 
+        const savedItems = items.map(item => {
+          const { sub, ...rest } = item;
+          return {
+            ...rest,
+            type: sub || item.type || 'Standard Treatment',
+            types: item.types || (sub ? [{ id: 'legacy', name: sub, price: 0 }] : [])
+          };
+        });
+
         // 1. Update order in SQLite
         await window.electronAPI.dbQuery(
           `UPDATE orders 
            SET items = ?, totalAmount = ?, dueAmount = MAX(0, totalAmount - paidAmount), isSynced = 0, updatedAt = ? 
            WHERE id = ?`,
-          [JSON.stringify(items), newTotal, timestamp, order.id]
+          [JSON.stringify(savedItems), newTotal, timestamp, order.id]
         );
 
         // 2. If customer exists, update customer balance by the difference
@@ -395,7 +404,7 @@ export default function InvoiceTemplate({ order, settings, isPreview = false, on
                 <GripVertical size={14} style={{ cursor: 'grab' }} />
               </td>
 
-              {/* Name */}
+              {/* Name + Treatments */}
               <td>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <EditableCell
@@ -404,25 +413,47 @@ export default function InvoiceTemplate({ order, settings, isPreview = false, on
                     onChange={(v) => updateItem(idx, 'name', v)}
                     className={styles.itemName}
                   />
+                  {/* Render treatments as bullet points */}
+                  {(() => {
+                    const typesList = item.types && item.types.length > 0
+                      ? item.types
+                      : item.sub
+                        ? item.sub.split(' + ').map(n => ({ name: n }))
+                        : [];
+                    return typesList.length > 0 ? (
+                      <div style={{ marginTop: '0.2rem' }}>
+                        {typesList.map((t, ti) => (
+                          <div key={ti} style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 600, lineHeight: 1.4 }}>
+                            • {t.name}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
+                  {/* Addons as blue bullets */}
+                  {item.addons && item.addons.length > 0 && (
+                    <div style={{ marginTop: '0.15rem' }}>
+                      {item.addons.map((a, ai) => (
+                        <div key={ai} style={{ fontSize: '0.72rem', color: '#2563EB', fontWeight: 700, lineHeight: 1.4 }}>
+                          + {a}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {item.description && (
                     <span style={{ fontSize: '0.75rem', color: '#DC2626', fontWeight: 600, marginTop: '0.15rem' }}>
-                      ⚠️ Damage Notes: {item.description}
-                    </span>
-                  )}
-                  {item.addons && item.addons.length > 0 && (
-                    <span style={{ fontSize: '0.7rem', color: '#2563EB', fontWeight: 700, background: '#EFF6FF', padding: '0.1rem 0.4rem', borderRadius: '4px', width: 'fit-content', marginTop: '0.2rem' }}>
-                      + {item.addons.join(', ')}
+                      ⚠️ {item.description}
                     </span>
                   )}
                 </div>
               </td>
 
-              {/* Service type */}
+              {/* Service type / Category */}
               <td>
                 <EditableCell
                   editing={editMode}
-                  value={item.sub}
-                  onChange={(v) => updateItem(idx, 'sub', v)}
+                  value={item.category || item.sub}
+                  onChange={(v) => updateItem(idx, 'category', v)}
                   className={styles.itemServiceType}
                 />
               </td>

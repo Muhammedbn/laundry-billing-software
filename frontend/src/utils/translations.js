@@ -78,6 +78,10 @@ const translations = {
     settleNow: "Settle Now",
     customerstatement: "Customer Statement",
     taxstatements: "Tax Statements",
+    dailytaxreport: "Daily Tax Report",
+    salestax: "Sales Tax",
+    expensetax: "Expense Tax",
+    nettaxpayable: "Net Tax Payable",
     // New translations keys
     orderManagement: "Order Management",
     orderManagementSub: "Track laundry status, generate QR receipts, and manage deliveries.",
@@ -206,6 +210,10 @@ const translations = {
     settleNow: "تسوية الآن",
     customerstatement: "كشف حساب العميل",
     taxstatements: "كشوفات الضرائب",
+    dailytaxreport: "تقرير الضرائب اليومي",
+    salestax: "ضريبة المبيعات",
+    expensetax: "ضريبة المصاريف",
+    nettaxpayable: "صافي الضريبة المستحقة",
     // New translations keys
     orderManagement: "إدارة الطلبات",
     orderManagementSub: "تتبع حالة الغسيل، وتوليد إيصالات الاستجابة السريعة، وإدارة عمليات التسليم.",
@@ -334,6 +342,10 @@ const translations = {
     settleNow: "अभी निपटान करें",
     customerstatement: "ग्राहक विवरण",
     taxstatements: "कर विवरण",
+    dailytaxreport: "दैनिक कर रिपोर्ट",
+    salestax: "बिक्री कर",
+    expensetax: "व्यय कर",
+    nettaxpayable: "शुद्ध देय कर",
     // New translations keys
     orderManagement: "आदेश प्रबंधन",
     orderManagementSub: "कपड़े धोने की स्थिति को ट्रैक करें, क्यूआर रसीदें जनरेट करें, और डिलीवरी प्रबंधित करें।",

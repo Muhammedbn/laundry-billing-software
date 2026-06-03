@@ -7,14 +7,12 @@ import Orders from './pages/Orders';
 import Customers from './pages/Customers';
 import Settings from './pages/Settings';
 import Services from './pages/Services';
-import ServiceList from './pages/services/ServiceList';
-import ServiceType from './pages/services/ServiceType';
-import Addons from './pages/services/Addons';
 import Reports from './pages/Reports';
 import RevenueReport from './pages/RevenueReport';
 import CustomerStatement from './pages/CustomerStatement';
 import Expenses from './pages/Expenses';
 import TaxReport from './pages/TaxReport';
+import DailyTaxReport from './pages/DailyTaxReport';
 import CancelledOrdersReport from './pages/CancelledOrdersReport';
 import DeletedOrders from './pages/DeletedOrders';
 import Invoice from './pages/Invoice';
@@ -54,10 +52,10 @@ function App() {
           </Route>
           <Route path="customers" element={<Customers />} />
           <Route path="services">
-            <Route index element={<Services />} />
-            <Route path="list" element={<ServiceList />} />
-            <Route path="type" element={<ServiceType />} />
-            <Route path="addons" element={<Addons />} />
+            <Route index element={<Services defaultTab="list" />} />
+            <Route path="list" element={<Services defaultTab="list" />} />
+            <Route path="type" element={<Services defaultTab="type" />} />
+            <Route path="addons" element={<Services defaultTab="addons" />} />
           </Route>
           <Route path="reports">
             <Route index element={<Reports />} />
@@ -66,6 +64,7 @@ function App() {
             <Route path="customer-statement" element={<CustomerStatement />} />
             <Route path="customer-statement/:customerId" element={<CustomerStatement />} />
             <Route path="tax" element={<TaxReport />} />
+            <Route path="daily-tax" element={<DailyTaxReport />} />
             <Route path="cancelled" element={<CancelledOrdersReport />} />
           </Route>
           <Route path="expenses" element={<Expenses />} />

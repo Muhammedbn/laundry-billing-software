@@ -9,12 +9,16 @@ import getCroppedImg from '../utils/cropImage';
 import { useSettings } from '../store/SettingsContext';
 import CurrencySymbol from '../components/CurrencySymbol';
 import InvoiceTemplate from '../components/InvoiceTemplate';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import styles from './Settings.module.css';
 
 export default function Settings() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('General');
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const tabParam = queryParams.get('tab');
+
+  const [activeTab, setActiveTab] = useState(tabParam || 'General');
   const { settings, updateSettings } = useSettings();
   
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
@@ -35,21 +39,40 @@ export default function Settings() {
   // Software Update States
   const [updateStatus, setUpdateStatus] = useState({ type: 'idle' });
   const [lastCheckTime, setLastCheckTime] = useState(localStorage.getItem('update_last_check') || '');
+  const [currentVersion, setCurrentVersion] = useState('1.0.0');
 
   useEffect(() => {
-    if (window.electronAPI?.onUpdateStatus) {
-      window.electronAPI.onUpdateStatus((status) => {
-        setUpdateStatus(status);
-        if (status.type === 'checking') {
-          const checkTimeString = new Date().toLocaleString();
-          setLastCheckTime(checkTimeString);
-          localStorage.setItem('update_last_check', checkTimeString);
-        }
-      });
+    if (tabParam) {
+      setActiveTab(tabParam);
     }
+  }, [tabParam]);
+
+  useEffect(() => {
+    const handleUpdate = (event, status) => {
+      setUpdateStatus(status);
+      if (status.type === 'checking') {
+        const checkTimeString = new Date().toLocaleString();
+        setLastCheckTime(checkTimeString);
+        localStorage.setItem('update_last_check', checkTimeString);
+      }
+    };
+
+    if (window.electronAPI?.onUpdateStatus) {
+      window.electronAPI.onUpdateStatus(handleUpdate);
+    }
+    
+    // Load app version dynamically
+    const loadVersion = async () => {
+      if (window.electronAPI?.getAppVersion) {
+        const ver = await window.electronAPI.getAppVersion();
+        setCurrentVersion(ver);
+      }
+    };
+    loadVersion();
+
     return () => {
-      if (window.electronAPI?.removeUpdateListeners) {
-        window.electronAPI.removeUpdateListeners();
+      if (window.electronAPI?.offUpdateStatus) {
+        window.electronAPI.offUpdateStatus(handleUpdate);
       }
     };
   }, []);
@@ -1354,7 +1377,7 @@ export default function Settings() {
                 }
               `}</style>
               <div className={styles.card} style={{ background: '#FFFFFF', padding: '2.5rem', borderRadius: '16px', border: '1px solid #F1F5F9', boxShadow: '0 4px 20px -2px rgba(148, 163, 184, 0.12)' }}>
-                <div className={styles.cardHeader} style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '2.5rem' }}>
+                <div className={styles.cardHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '1.25rem', marginBottom: '2.5rem' }}>
                   <div style={{ background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)', padding: '1rem', borderRadius: '14px' }}>
                     <Cpu size={32} color="#2563EB" />
                   </div>
@@ -1368,7 +1391,7 @@ export default function Settings() {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', background: '#F8FAFC', padding: '1.5rem', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
                     <div style={{ minWidth: '180px' }}>
                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current Version</span>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1E293B', marginTop: '0.25rem' }}>v1.0.0</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1E293B', marginTop: '0.25rem' }}>v{currentVersion}</div>
                     </div>
                     <div style={{ minWidth: '180px' }}>
                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last Checked</span>

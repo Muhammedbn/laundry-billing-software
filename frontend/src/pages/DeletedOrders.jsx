@@ -23,12 +23,21 @@ export default function DeletedOrders() {
   const { settings, formatDate } = useSettings();
   const navigate = useNavigate();
 
-  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
-  const isAuthorized = user.role === 'super_admin' || user.role === 'manager';
+  const [pinVerified, setPinVerified] = useState(false);
+  const [enteredPin, setEnteredPin] = useState('');
+  const [pinError, setPinError] = useState('');
 
-  useEffect(() => {
-    if (!isAuthorized) navigate('/');
-  }, [isAuthorized, navigate]);
+  const handlePinSubmit = (e) => {
+    e.preventDefault();
+    const correctPin = settings.orderDeletePin || '0000';
+    if (enteredPin === correctPin) {
+      setPinVerified(true);
+      setPinError('');
+    } else {
+      setPinError('Invalid PIN code. Please try again.');
+      setEnteredPin('');
+    }
+  };
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,8 +112,8 @@ export default function DeletedOrders() {
   };
 
   useEffect(() => {
-    if (isAuthorized) fetchData();
-  }, [isAuthorized, dateRange, customStart, customEnd]);
+    if (pinVerified) fetchData();
+  }, [pinVerified, dateRange, customStart, customEnd]);
 
   const filteredOrders = useMemo(() => {
     return orders.filter(o => {
@@ -140,8 +149,7 @@ export default function DeletedOrders() {
         const ref = (o.billNumber || o.id || '').toLowerCase();
         const name = (o.customerName || '').toLowerCase();
         const phone = (o.customerPhone || '').toLowerCase();
-        const user = (o.deletedBy || '').toLowerCase();
-        if (!ref.includes(q) && !name.includes(q) && !phone.includes(q) && !user.includes(q)) return false;
+        if (!ref.includes(q) && !name.includes(q) && !phone.includes(q)) return false;
       }
       return true;
     });
@@ -150,11 +158,9 @@ export default function DeletedOrders() {
   // KPIs
   const totalDeleted = filteredOrders.length;
   const totalVoidedAmount = filteredOrders.reduce((s, o) => s + (o.totalAmount || 0), 0);
-  const uniqueAuditedUsers = new Set(filteredOrders.map(o => o.deletedBy)).size;
-
   // Export CSV
   const exportCSV = () => {
-    const headers = ['Deletion Date', 'Order ID', 'Bill No.', 'Customer', 'Phone', 'Items', 'Voided Amount', 'Deleted By'];
+    const headers = ['Deletion Date', 'Order ID', 'Bill No.', 'Customer', 'Phone', 'Items', 'Voided Amount'];
     const rows = filteredOrders.map(o => {
       let items = '';
       try {
@@ -168,8 +174,7 @@ export default function DeletedOrders() {
         `"${o.customerName || 'Walk-in'}"`,
         o.customerPhone || '',
         `"${items}"`,
-        (o.totalAmount || 0).toFixed(2),
-        `"${o.deletedBy || 'Manager'}"`
+        (o.totalAmount || 0).toFixed(2)
       ];
     });
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -180,7 +185,44 @@ export default function DeletedOrders() {
     a.click();
   };
 
-  if (!isAuthorized) return null;
+  if (!pinVerified) {
+    return (
+      <div className={styles.pinContainer}>
+        <motion.div 
+          className={styles.pinCard}
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className={styles.pinIconBox}>
+            <AlertTriangle size={32} />
+          </div>
+          <h2>Enter Security PIN</h2>
+          <p>This area contains sensitive voided order logs. Please input the security PIN to proceed.</p>
+          <form onSubmit={handlePinSubmit}>
+            <input 
+              type="password" 
+              placeholder="••••" 
+              maxLength={8}
+              value={enteredPin}
+              onChange={(e) => setEnteredPin(e.target.value.replace(/\D/g, ''))}
+              autoFocus
+              className={styles.pinInput}
+            />
+            {pinError && <span className={styles.pinErrorText}>{pinError}</span>}
+            <div className={styles.pinActions}>
+              <button type="button" className={styles.cancelBtn} onClick={() => navigate('/')}>
+                Cancel
+              </button>
+              <button type="submit" className={styles.submitBtn}>
+                Verify PIN
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page}>
@@ -189,7 +231,7 @@ export default function DeletedOrders() {
         <div className={styles.headerInfo}>
           <div className={styles.breadcrumb}>Orders / Audit</div>
           <h1>Deleted Orders Log</h1>
-          <p className={styles.subtext}>Monitor order voids, deletion timestamps, and authorizing managers.</p>
+          <p className={styles.subtext}>Monitor order voids and deletion timestamps.</p>
         </div>
         <div className={styles.headerActions}>
           <button className={styles.clearBtn} onClick={exportCSV} title="Export CSV Report">
@@ -202,7 +244,7 @@ export default function DeletedOrders() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className={styles.kpiGrid}>
+      <div className={styles.kpiGrid} style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
         <div className={styles.kpiCard}>
           <div className={styles.cardHeader}>
             <span className={styles.kpiLabel}>Total Voided Orders</span>
@@ -226,17 +268,6 @@ export default function DeletedOrders() {
           </div>
           <div className={styles.kpiSubtext}>Revenue removed from accounting</div>
         </div>
-
-        <div className={styles.kpiCard}>
-          <div className={styles.cardHeader}>
-            <span className={styles.kpiLabel}>Authorizers Active</span>
-            <div className={styles.iconBox} style={{ background: '#EEF2F6', color: '#64748B' }}>
-              <Users size={20} />
-            </div>
-          </div>
-          <div className={styles.kpiValue}>{uniqueAuditedUsers}</div>
-          <div className={styles.kpiSubtext}>Managers approving deletions</div>
-        </div>
       </div>
 
       {/* Main Table Card */}
@@ -248,7 +279,7 @@ export default function DeletedOrders() {
             <input
               type="text"
               className={styles.searchInput}
-              placeholder="Search by ID, customer name, phone or authorizer..."
+              placeholder="Search by ID, customer name or phone..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -302,7 +333,6 @@ export default function DeletedOrders() {
                 <th>Customer</th>
                 <th>Items Summary</th>
                 <th className={styles.numCol}>Amount</th>
-                <th>Authorized By</th>
               </tr>
             </thead>
             <tbody>
@@ -340,11 +370,6 @@ export default function DeletedOrders() {
                   </td>
                   <td className={`${styles.amountCell} ${styles.numCol}`}>
                     <CurrencySymbol size={12} /> {(order.totalAmount || 0).toFixed(2)}
-                  </td>
-                  <td>
-                    <span className={styles.deletedByText}>
-                      {order.deletedBy || 'Manager'}
-                    </span>
                   </td>
                 </tr>
               ))}

@@ -25,14 +25,44 @@ export default function POS() {
   const [step, setStep] = useState('pos'); // pos, checkout
   const [cart, setCart] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
-  const [serviceConfig, setServiceConfig] = useState({ types: ['wf'], addons: [], qty: 1, customPrice: null, description: '' });
+  const [serviceConfig, setServiceConfig] = useState({ selectedTypeIds: [], addons: [], qty: 1, customPrice: null, description: '' });
   const [editingCartIdx, setEditingCartIdx] = useState(null); // index of cart item being edited
 
-  const activeServiceTypes = selectedService ? serviceTypes.filter(t => serviceConfig.types.includes(t.id)) : [];
+  const servicePricing = React.useMemo(() => {
+    if (!selectedService || selectedService.isTemporary) return [];
+    try {
+      return typeof selectedService.pricing === 'string'
+        ? JSON.parse(selectedService.pricing || '[]')
+        : (selectedService.pricing || []);
+    } catch (e) {
+      return [];
+    }
+  }, [selectedService]);
+
+  const availableTypesForService = React.useMemo(() => {
+    if (!selectedService || selectedService.isTemporary) return [];
+    return servicePricing.map(p => {
+      const globalType = serviceTypes.find(t => t.id === p.serviceTypeId);
+      return {
+        id: p.serviceTypeId,
+        name: globalType ? globalType.name : 'Unknown Type',
+        icon: globalType ? globalType.icon : 'Shirt',
+        price: p.price
+      };
+    }).filter(t => t.id);
+  }, [selectedService, servicePricing, serviceTypes]);
+
+  const selectedTypePrice = React.useMemo(() => {
+    if (!selectedService || selectedService.isTemporary) return 0;
+    const matches = servicePricing.filter(p => (serviceConfig.selectedTypeIds || []).includes(p.serviceTypeId));
+    return matches.reduce((sum, p) => sum + (p.price || 0), 0);
+  }, [selectedService, servicePricing, serviceConfig.selectedTypeIds]);
+
   const activeSelectedAddons = selectedService ? addons.filter(a => serviceConfig.addons.includes(a.id)) : [];
-  const activeServiceTypePrice = activeServiceTypes.reduce((sum, t) => sum + t.price, 0);
   const activeAddonPrice = activeSelectedAddons.reduce((sum, a) => sum + a.price, 0);
-  const activeCalculatedPrice = (selectedService?.price || 0) + activeServiceTypePrice + activeAddonPrice;
+  const activeCalculatedPrice = selectedService?.isTemporary
+    ? (selectedService.price || 0)
+    : (selectedTypePrice + activeAddonPrice);
   
   useEffect(() => {
     fetchPOSData();
@@ -226,8 +256,17 @@ export default function POS() {
 
   const handleServiceClick = (service) => {
     setSelectedService(service);
-    const defaultType = serviceTypes[0]?.id || 'wf';
-    setServiceConfig({ types: [defaultType], addons: [], qty: 1, customPrice: null, description: '' });
+    let defaultTypeId = '';
+    let parsedPricing = [];
+    try {
+      parsedPricing = typeof service.pricing === 'string' ? JSON.parse(service.pricing || '[]') : (service.pricing || []);
+    } catch (e) {}
+    if (parsedPricing.length > 0) {
+      defaultTypeId = parsedPricing[0].serviceTypeId;
+    } else if (serviceTypes.length > 0) {
+      defaultTypeId = serviceTypes[0].id;
+    }
+    setServiceConfig({ selectedTypeIds: defaultTypeId ? [defaultTypeId] : [], addons: [], qty: 1, customPrice: null, description: '' });
   };
 
   const addToCart = () => {
@@ -238,33 +277,81 @@ export default function POS() {
       return;
     }
     
-    if (!selectedService.isTemporary && activeServiceTypes.length === 0) return;
-    
-    const unitPrice = serviceConfig.customPrice !== null && serviceConfig.customPrice !== '' 
-      ? parseFloat(serviceConfig.customPrice) 
-      : activeCalculatedPrice;
-    
-    const newItem = {
-      id: editingCartIdx !== null ? cart[editingCartIdx].id : Date.now().toString(),
-      serviceId: selectedService.id,
-      name: selectedService.name.trim(),
-      price: unitPrice,
-      type: selectedService.isTemporary ? 'Custom' : activeServiceTypes.map(t => t.name).join(', '),
-      addons: selectedService.isTemporary ? [] : activeSelectedAddons.map(a => a.name),
-      qty: serviceConfig.qty,
-      taxRate: selectedService.taxRate || settings.taxRate || 0,
-      description: serviceConfig.description || ''
-    };
-    
-    if (editingCartIdx !== null) {
-      // Replace the existing cart item
-      const newCart = [...cart];
-      newCart[editingCartIdx] = newItem;
-      setCart(newCart);
-      setEditingCartIdx(null);
-    } else {
-      setCart([...cart, newItem]);
+    if (!selectedService.isTemporary && (!serviceConfig.selectedTypeIds || serviceConfig.selectedTypeIds.length === 0)) {
+      alert("Please select at least one treatment/service type.");
+      return;
     }
+    
+    if (selectedService.isTemporary) {
+      const unitPrice = serviceConfig.customPrice !== null && serviceConfig.customPrice !== '' 
+        ? parseFloat(serviceConfig.customPrice) 
+        : activeCalculatedPrice;
+      
+      const newItem = {
+        id: editingCartIdx !== null ? cart[editingCartIdx].id : Date.now().toString(),
+        serviceId: selectedService.id,
+        name: selectedService.name.trim(),
+        price: unitPrice,
+        type: 'Custom',
+        types: [{ id: 'custom', name: 'Custom', price: unitPrice }],
+        addons: [],
+        qty: serviceConfig.qty,
+        taxRate: selectedService.taxRate || settings.taxRate || 0,
+        description: serviceConfig.description || '',
+        category: selectedService.category || 'Standard'
+      };
+      
+      if (editingCartIdx !== null) {
+        const newCart = [...cart];
+        newCart[editingCartIdx] = newItem;
+        setCart(newCart);
+        setEditingCartIdx(null);
+      } else {
+        setCart([...cart, newItem]);
+      }
+    } else {
+      // Gather all selected types
+      const selectedTypes = serviceConfig.selectedTypeIds.map(typeId => {
+        const selectedTypeObj = availableTypesForService.find(t => t.id === typeId);
+        return {
+          id: typeId,
+          name: selectedTypeObj ? selectedTypeObj.name : 'Unknown',
+          price: selectedTypeObj ? parseFloat(selectedTypeObj.price || 0) : 0
+        };
+      });
+
+      const sumTypesPrice = selectedTypes.reduce((sum, t) => sum + t.price, 0);
+      const calculatedUnitPrice = sumTypesPrice + activeAddonPrice;
+      const finalPrice = serviceConfig.customPrice !== null && serviceConfig.customPrice !== '' 
+        ? parseFloat(serviceConfig.customPrice)
+        : calculatedUnitPrice;
+
+      const joinedTypeName = selectedTypes.map(t => t.name).join(' + ');
+
+      const newItem = {
+        id: editingCartIdx !== null ? cart[editingCartIdx].id : Date.now().toString(),
+        serviceId: selectedService.id,
+        name: selectedService.name.trim(),
+        price: finalPrice,
+        type: joinedTypeName, // legacy fallback type string
+        types: selectedTypes,  // new types array
+        addons: activeSelectedAddons.map(a => a.name),
+        qty: serviceConfig.qty,
+        taxRate: selectedService.taxRate || settings.taxRate || 0,
+        description: serviceConfig.description || '',
+        category: selectedService.category || 'Standard'
+      };
+
+      if (editingCartIdx !== null) {
+        const newCart = [...cart];
+        newCart[editingCartIdx] = newItem;
+        setCart(newCart);
+        setEditingCartIdx(null);
+      } else {
+        setCart([...cart, newItem]);
+      }
+    }
+    
     setSelectedService(null);
     setItemSearch('');
     setShowItemPresets(false);
@@ -289,27 +376,35 @@ export default function POS() {
 
   const handleEditCartItem = (idx) => {
     const item = cart[idx];
-    // Find the matching service object
-    const svc = services.find(s => s.name === item.name) || {
+    const svc = services.find(s => s.id === item.serviceId || s.name === item.name) || {
       id: item.serviceId || 'temp',
       name: item.name,
       price: item.price,
       icon: 'Package',
       isTemporary: !services.find(s => s.name === item.name)
     };
-    // Resolve type IDs from names
-    const typeNames = item.type ? item.type.split(', ') : [];
-    const resolvedTypeIds = serviceTypes
-      .filter(t => typeNames.includes(t.name))
-      .map(t => t.id);
+    
+    // Resolve type IDs from item.types, falling back to split item.type (legacy)
+    let resolvedTypeIds = [];
+    if (item.types && Array.isArray(item.types) && item.types.length > 0) {
+      resolvedTypeIds = item.types.map(t => t.id);
+    } else if (item.type) {
+      const typeNames = item.type.split(' + ');
+      resolvedTypeIds = typeNames.map(name => {
+        const matchingType = serviceTypes.find(t => t.name === name);
+        return matchingType ? matchingType.id : '';
+      }).filter(Boolean);
+    }
+    
     // Resolve addon IDs from names
     const resolvedAddonIds = addons
       .filter(a => (item.addons || []).includes(a.name))
       .map(a => a.id);
+      
     setEditingCartIdx(idx);
     setSelectedService(svc);
     setServiceConfig({
-      types: resolvedTypeIds.length > 0 ? resolvedTypeIds : [serviceTypes[0]?.id || 'wf'],
+      selectedTypeIds: resolvedTypeIds,
       addons: resolvedAddonIds,
       qty: item.qty,
       customPrice: item.price,
@@ -330,15 +425,13 @@ export default function POS() {
 
   const toggleServiceType = (id) => {
     setServiceConfig(prev => {
-      const isSelected = prev.types.includes(id);
-      if (isSelected && prev.types.length <= 1) {
-        return prev;
-      }
+      const isSelected = (prev.selectedTypeIds || []).includes(id);
+      const newTypeIds = isSelected 
+        ? prev.selectedTypeIds.filter(x => x !== id)
+        : [...prev.selectedTypeIds, id];
       return {
         ...prev,
-        types: isSelected
-          ? prev.types.filter(t => t !== id)
-          : [...prev.types, id]
+        selectedTypeIds: newTypeIds
       };
     });
   };
@@ -609,16 +702,22 @@ export default function POS() {
                 <div className={styles.cartItemIcon}>{getIcon(services.find(s => s.name === item.name)?.icon)}</div>
                 <div className={styles.cartItemDetails}>
                   <span className={styles.cartItemName}>{item.name}</span>
-                  <span className={styles.cartItemPrice}><CurrencySymbol size={14} /> {item.price.toFixed(2)}</span>
-                  <span className={styles.cartItemMeta}>{item.type.toUpperCase()}</span>
+                  <span className={styles.cartItemMeta}>
+                    {(() => {
+                      const treatments = item.type || '';
+                      const addonsList = (item.addons || []).join(' + ');
+                      return [treatments, addonsList].filter(Boolean).join(' + ').toUpperCase();
+                    })()}
+                    {item.qty > 1 && (
+                      <>
+                        {' • '}
+                        {item.qty} × <CurrencySymbol size={12} /> {item.price.toFixed(2)}
+                      </>
+                    )}
+                  </span>
                   {item.description && (
                     <span style={{ fontSize: '0.75rem', color: '#DC2626', fontWeight: 600, marginTop: '0.15rem' }}>
                       ⚠️ Damage Notes: {item.description}
-                    </span>
-                  )}
-                  {item.addons && item.addons.length > 0 && (
-                    <span className={styles.cartItemAddons}>
-                      + {item.addons.join(', ')}
                     </span>
                   )}
                 </div>
@@ -945,15 +1044,22 @@ export default function POS() {
               </div>
               <div className={styles.cartItemDetails}>
                 <span className={styles.cartItemName}>{item.name}</span>
-                <span className={styles.cartItemMeta}>{item.type} • <CurrencySymbol size={10} /> {item.price.toFixed(2)}</span>
+                <span className={styles.cartItemMeta}>
+                  {(() => {
+                    const treatments = item.type || '';
+                    const addonsList = (item.addons || []).join(' + ');
+                    return [treatments, addonsList].filter(Boolean).join(' + ');
+                  })()}
+                  {item.qty > 1 && (
+                    <>
+                      {' • '}
+                      {item.qty} × <CurrencySymbol size={10} /> {item.price.toFixed(2)}
+                    </>
+                  )}
+                </span>
                 {item.description && (
                   <span className={styles.cartItemRemarks}>
                     ⚠️ Fabric Notes: {item.description}
-                  </span>
-                )}
-                {item.addons && item.addons.length > 0 && (
-                  <span className={styles.cartItemAddons}>
-                    + {item.addons.join(', ')}
                   </span>
                 )}
               </div>
@@ -1067,8 +1173,8 @@ export default function POS() {
                   <div className={styles.modalSection}>
                     <h3 className={styles.modalSectionTitle}>Treatment / Service Type</h3>
                     <div className={styles.serviceTypeGrid}>
-                      {serviceTypes.map(type => {
-                        const isSelected = serviceConfig.types.includes(type.id);
+                      {availableTypesForService.map(type => {
+                        const isSelected = (serviceConfig.selectedTypeIds || []).includes(type.id);
                         return (
                           <div 
                             key={type.id} 
@@ -1076,13 +1182,13 @@ export default function POS() {
                             onClick={() => toggleServiceType(type.id)}
                           >
                             <div className={styles.selectionIndicator}>
-                              <div className={styles.checkboxOutline}>
+                              <div className={styles.checkboxOutline} style={{ borderRadius: '4px' }}>
                                 {isSelected && <CheckCircle size={10} className={styles.checkIconMini} />}
                               </div>
                             </div>
                             <div className={styles.serviceTypeIcon}>{getIcon(type.icon, 16)}</div>
                             <span className={styles.serviceTypeName}>{type.name}</span>
-                            <span className={styles.serviceTypePrice}>+ {formatCurrency(type.price)}</span>
+                            <span className={styles.serviceTypePrice}>{formatCurrency(type.price)}</span>
                           </div>
                         );
                       })}

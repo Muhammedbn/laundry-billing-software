@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { DEFAULT_SHOP_ID } from '../constants';
 
 const SettingsContext = createContext();
@@ -27,7 +27,7 @@ export function SettingsProvider({ children }) {
     taxMethod: 'exclusive',
     invoiceTemplate: 'standard',
     waCountryCode: '971',
-    currencySymbol: '',
+    currencySymbol: 'د.إ',
     activationCode: '',
     expiryDate: '',
     isActivated: true,
@@ -63,6 +63,11 @@ export function SettingsProvider({ children }) {
     invoiceTermsText: '1. Please present this invoice at the time of pickup.\n2. We are not responsible for color fading or shrinkage.\n3. Orders must be collected within 30 days.'
   });
 
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
   useEffect(() => {
     fetchSettings();
   }, []);
@@ -96,7 +101,7 @@ export function SettingsProvider({ children }) {
             taxMethod: shopSettings?.taxMethod || 'exclusive',
             invoiceTemplate: shopSettings?.invoiceTemplate || 'standard',
             waCountryCode: shopSettings?.waCountryCode || '971',
-            currencySymbol: shopSettings?.currencySymbol ?? '',
+            currencySymbol: shopSettings?.currencySymbol || 'د.إ',
             activationCode: shopSettings?.activationCode || '',
             expiryDate: shopSettings?.expiryDate || '',
             isActivated: shop.isActivated === 1,
@@ -139,7 +144,8 @@ export function SettingsProvider({ children }) {
   };
 
   const updateSettings = async (newSettings) => {
-    const updated = { ...settings, ...newSettings };
+    const updated = { ...settingsRef.current, ...newSettings };
+    settingsRef.current = updated;
     setSettings(updated);
 
     if (window.electronAPI?.dbQuery) {

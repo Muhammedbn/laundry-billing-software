@@ -168,6 +168,44 @@ export const syncData = async () => {
         ]);
       }
 
+      // 5.4 Save incoming services from backend
+      const incomingServices = response.data.data?.services || [];
+      for (const service of incomingServices) {
+        const pricingJson = typeof service.pricing === 'string' ? service.pricing : JSON.stringify(service.pricing || []);
+        await window.electronAPI.dbQuery(`
+          INSERT OR REPLACE INTO services 
+          (id, shopId, name, price, icon, image, category, taxRate, isSynced, updatedAt, pricing) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        `, [
+          service.id,
+          service.shopId,
+          service.name,
+          service.price || 0,
+          service.icon || null,
+          service.image || null,
+          service.category || null,
+          service.taxRate || null,
+          service.updatedAt || new Date().toISOString(),
+          pricingJson
+        ]);
+      }
+
+      // 5.8 Save incoming categories from backend
+      const incomingCategories = response.data.data?.categories || [];
+      for (const cat of incomingCategories) {
+        await window.electronAPI.dbQuery(`
+          INSERT OR REPLACE INTO service_categories 
+          (id, shopId, name, icon, isSynced, updatedAt) 
+          VALUES (?, ?, ?, ?, 1, ?)
+        `, [
+          cat.id,
+          cat.shopId,
+          cat.name,
+          cat.icon || null,
+          cat.updatedAt || new Date().toISOString()
+        ]);
+      }
+
       // Update last sync time in SQLite database
       await window.electronAPI.dbQuery(
         'INSERT OR REPLACE INTO sync_state (shopId, lastSyncTimestamp, updatedAt) VALUES (?, ?, ?)',

@@ -195,6 +195,10 @@ ipcMain.on('open-external', (event, url) => {
   shell.openExternal(url);
 });
 
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
 // Native PDF generation via Electron (properly renders Arabic/RTL text)
 ipcMain.handle('print-to-pdf', async (event, options) => {
   try {

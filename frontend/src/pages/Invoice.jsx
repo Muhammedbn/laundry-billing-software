@@ -95,11 +95,14 @@ export default function Invoice() {
                 return Array.isArray(parsed) ? parsed.map(item => ({
                   name: item.name,
                   sub: item.type || 'Standard Treatment',
+                  types: item.types || (item.type ? [{ id: 'legacy', name: item.type, price: 0 }] : []),
                   qty: item.qty,
                   price: item.price,
                   total: item.price * item.qty,
                   addons: item.addons || [],
-                  description: item.description || ''
+                  description: item.description || '',
+                  category: item.category || 'Standard',
+                  serviceId: item.serviceId || null
                 })) : [];
               })(),
               subtotal: subtotal,
