@@ -516,6 +516,7 @@ export default function MainLayout() {
         // Record Transaction in Accounts
         const txnId = `TXN-${Date.now()}`;
         const txnTimestamp = getLocalDateTime();
+        const mappedBankId = settleMethod === 'BANK' ? (settings.bankAccounts?.find(acc => acc.bankName === selectedBank || acc.id === selectedBank)?.id || selectedBank) : null;
         await window.electronAPI.dbQuery(
           `INSERT INTO account_transactions 
            (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon, bankAccountId) 
@@ -531,7 +532,7 @@ export default function MainLayout() {
             txnTimestamp,
             timestamp,
             'DollarSign',
-            settleMethod === 'BANK' ? selectedBank : null
+            mappedBankId
           ]
         );
 
@@ -600,6 +601,7 @@ export default function MainLayout() {
         // Record Transaction in Accounts
         const txnId = `TXN-${Date.now()}`;
         const txnTimestamp = getLocalDateTime();
+        const mappedBankId = settleMethod === 'BANK' ? (settings.bankAccounts?.find(acc => acc.bankName === selectedBank || acc.id === selectedBank)?.id || selectedBank) : null;
         await window.electronAPI.dbQuery(
           `INSERT INTO account_transactions 
            (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon, bankAccountId) 
@@ -615,7 +617,7 @@ export default function MainLayout() {
             txnTimestamp,
             timestamp,
             'DollarSign',
-            settleMethod === 'BANK' ? selectedBank : null
+            mappedBankId
           ]
         );
 

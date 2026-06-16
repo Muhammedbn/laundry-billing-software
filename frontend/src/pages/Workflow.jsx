@@ -270,11 +270,12 @@ export default function Workflow() {
         const txnId = `TXN-${Date.now()}`;
         const _now = new Date();
         const txnTimestamp = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')} ${String(_now.getHours()).padStart(2,'0')}:${String(_now.getMinutes()).padStart(2,'0')}`;
+        const mappedBankId = payMethod === 'Bank' ? (settings.defaultBankId || settings.bankAccounts?.[0]?.id || null) : null;
         await window.electronAPI.dbQuery(
           `INSERT INTO account_transactions 
-           (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [txnId, DEFAULT_SHOP_ID, payMethod === 'Bank' ? 'BANK' : 'CASH', 'INCOME', 'Sales Settlement', amountToPay, `Payment for Order ${selectedOrder.id}`, txnTimestamp, 0, getLocalISOString(), 'DollarSign']
+           (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon, bankAccountId) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [txnId, DEFAULT_SHOP_ID, payMethod === 'Bank' ? 'BANK' : 'CASH', 'INCOME', 'Sales Settlement', amountToPay, `Payment for Order ${selectedOrder.id}`, txnTimestamp, 0, getLocalISOString(), 'DollarSign', mappedBankId]
         );
 
         await window.electronAPI.dbQuery(
@@ -465,10 +466,12 @@ export default function Workflow() {
   };
 
   const handlePrintTags = () => {
+    document.body.classList.add('printing-tags');
     setIsPrintingTags(true);
     setTimeout(() => {
       window.print();
       setIsPrintingTags(false);
+      document.body.classList.remove('printing-tags');
     }, 500);
   };
 

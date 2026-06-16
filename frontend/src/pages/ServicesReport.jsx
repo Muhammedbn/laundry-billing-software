@@ -46,10 +46,15 @@ export default function ServicesReport() {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Table Sorting State
   const [sortField, setSortField] = useState('revenue'); // 'name', 'category', 'qty', 'revenue'
   const [sortAsc, setSortAsc] = useState(false);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [dateRange, customStart, customEnd, searchTerm, sortField, sortAsc]);
 
   const fetchOrders = async () => {
     if (!window.electronAPI?.dbQuery) return;
@@ -209,6 +214,10 @@ export default function ServicesReport() {
 
     return result;
   }, [reportData.serviceList, searchTerm, sortField, sortAsc]);
+
+  const paginatedServices = useMemo(() => {
+    return sortedAndSearchedServices.slice((currentPage - 1) * 20, currentPage * 20);
+  }, [sortedAndSearchedServices, currentPage]);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -505,7 +514,7 @@ export default function ServicesReport() {
                 </tr>
               </thead>
               <tbody>
-                {sortedAndSearchedServices.map((svc, idx) => (
+                {paginatedServices.map((svc, idx) => (
                   <tr key={idx} className={styles.tableRow}>
                     <td className={styles.serviceNameCell}>{svc.name}</td>
                     <td>
@@ -533,6 +542,46 @@ export default function ServicesReport() {
             </table>
           </div>
         )}
+
+        {(() => {
+          const totalPages = Math.ceil(sortedAndSearchedServices.length / 20);
+          if (totalPages <= 1 || loading) return null;
+          return (
+            <div className={styles.paginationRow} data-noprint="true" style={{ marginTop: '1.5rem' }}>
+              <span className={styles.paginationInfo}>
+                Showing {Math.min(sortedAndSearchedServices.length, (currentPage - 1) * 20 + 1)}-{Math.min(sortedAndSearchedServices.length, currentPage * 20)} of {sortedAndSearchedServices.length} services
+              </span>
+              <div className={styles.paginationBtns}>
+                <button 
+                  className={styles.paginationBtn} 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                >
+                  Previous
+                </button>
+                {[...Array(totalPages)].map((_, idx) => {
+                  const pageNum = idx + 1;
+                  return (
+                    <button 
+                      key={pageNum}
+                      className={`${styles.paginationBtn} ${currentPage === pageNum ? styles.paginationActiveBtn : ''}`}
+                      onClick={() => setCurrentPage(pageNum)}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button 
+                  className={styles.paginationBtn} 
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </motion.div>
     </motion.div>
   );

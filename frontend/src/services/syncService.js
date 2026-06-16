@@ -15,12 +15,14 @@ export const syncData = async () => {
     const resOrders = await window.electronAPI.dbQuery('SELECT * FROM orders WHERE isSynced = 0', []);
     const resCustomers = await window.electronAPI.dbQuery('SELECT * FROM customers WHERE isSynced = 0', []);
     const resPayments = await window.electronAPI.dbQuery('SELECT * FROM payments WHERE isSynced = 0', []);
+    const resTxns = await window.electronAPI.dbQuery('SELECT * FROM account_transactions WHERE isSynced = 0', []);
     
     const unsyncedOrders = resOrders.data || [];
     const unsyncedCustomers = resCustomers.data || [];
     const unsyncedPayments = resPayments.data || [];
+    const unsyncedTxns = resTxns.data || [];
 
-    if (unsyncedOrders.length === 0 && unsyncedCustomers.length === 0 && unsyncedPayments.length === 0) {
+    if (unsyncedOrders.length === 0 && unsyncedCustomers.length === 0 && unsyncedPayments.length === 0 && unsyncedTxns.length === 0) {
       console.log('No local data to sync.');
     }
 
@@ -40,6 +42,7 @@ export const syncData = async () => {
       })),
       customers: unsyncedCustomers,
       payments: unsyncedPayments,
+      accountTransactions: unsyncedTxns,
       lastSyncTimestamp
     };
 
@@ -56,11 +59,15 @@ export const syncData = async () => {
       for (const payment of unsyncedPayments) {
         await window.electronAPI.dbQuery('UPDATE payments SET isSynced = 1 WHERE id = ?', [payment.id]);
       }
+      for (const txn of unsyncedTxns) {
+        await window.electronAPI.dbQuery('UPDATE account_transactions SET isSynced = 1 WHERE id = ?', [txn.id]);
+      }
 
       // 5. Save new items from backend to local DB
       const incomingOrders = response.data.data?.orders || [];
       const incomingCustomers = response.data.data?.customers || [];
       const incomingPayments = response.data.data?.payments || [];
+      const incomingTxns = response.data.data?.accountTransactions || [];
 
       for (const order of incomingOrders) {
         // LOCAL-WINS: If the local order was updated more recently than the incoming MongoDB data,
@@ -165,6 +172,38 @@ export const syncData = async () => {
           payment.status,
           payment.createdAt,
           payment.updatedAt || new Date().toISOString()
+        ]);
+      }
+
+      for (const txn of incomingTxns) {
+        const localRes = await window.electronAPI.dbQuery(
+          'SELECT updatedAt, isSynced FROM account_transactions WHERE id = ?', [txn.id]
+        );
+        if (localRes.success && localRes.data[0]) {
+          const localUpdatedAt = new Date(localRes.data[0].updatedAt).getTime();
+          const remoteUpdatedAt = new Date(txn.updatedAt).getTime();
+          if (localRes.data[0].isSynced === 0 || localUpdatedAt > remoteUpdatedAt) {
+            console.log(`Sync: Preserving local data for transaction ${txn.id} (local is newer or has pending changes)`);
+            continue;
+          }
+        }
+
+        await window.electronAPI.dbQuery(`
+          INSERT OR REPLACE INTO account_transactions 
+          (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon, bankAccountId) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+        `, [
+          txn.id,
+          txn.shopId,
+          txn.accountType,
+          txn.type,
+          txn.category,
+          txn.amount,
+          txn.description || null,
+          txn.date || null,
+          txn.updatedAt || new Date().toISOString(),
+          txn.icon || null,
+          txn.bankAccountId || null
         ]);
       }
 

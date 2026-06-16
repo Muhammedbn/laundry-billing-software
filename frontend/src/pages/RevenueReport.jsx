@@ -16,6 +16,11 @@ export default function RevenueReport() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMethod, setFilterMethod] = useState('All');
   const [filterDate, setFilterDate] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterMethod, filterDate]);
 
   useEffect(() => {
     fetchPayments();
@@ -61,6 +66,10 @@ export default function RevenueReport() {
   });
 
   const totalRevenue = filteredPayments.reduce((s, p) => s + p.amount, 0);
+
+  const paginatedPayments = React.useMemo(() => {
+    return filteredPayments.slice((currentPage - 1) * 20, currentPage * 20);
+  }, [filteredPayments, currentPage]);
 
   const stats = [
     { label: 'Total Collected', value: totalRevenue, icon: DollarSign, color: '#10B981', bg: '#ECFDF5' },
@@ -179,7 +188,7 @@ export default function RevenueReport() {
             </tr>
           </thead>
           <tbody>
-            {filteredPayments.map((p, i) => (
+            {paginatedPayments.map((p, i) => (
               <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
                 <td style={{ padding: '1.25rem 1rem', fontSize: '0.9rem', color: '#64748B', fontWeight: 600 }}>
                   {formatDate(p.createdAt)}
@@ -210,6 +219,46 @@ export default function RevenueReport() {
             )}
           </tbody>
         </table>
+
+        {(() => {
+          const totalPages = Math.ceil(filteredPayments.length / 20);
+          if (totalPages <= 1 || loading) return null;
+          return (
+            <div className={styles.paginationRow} data-noprint="true" style={{ marginTop: '1.5rem' }}>
+              <span className={styles.paginationInfo}>
+                Showing {Math.min(filteredPayments.length, (currentPage - 1) * 20 + 1)}-{Math.min(filteredPayments.length, currentPage * 20)} of {filteredPayments.length} transactions
+              </span>
+              <div className={styles.paginationBtns}>
+                <button 
+                  className={styles.paginationBtn} 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                >
+                  Previous
+                </button>
+                {[...Array(totalPages)].map((_, idx) => {
+                  const pageNum = idx + 1;
+                  return (
+                    <button 
+                      key={pageNum}
+                      className={`${styles.paginationBtn} ${currentPage === pageNum ? styles.paginationActiveBtn : ''}`}
+                      onClick={() => setCurrentPage(pageNum)}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button 
+                  className={styles.paginationBtn} 
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

@@ -297,11 +297,12 @@ export default function ExpectedDeliveries() {
         const txnId = `TXN-${Date.now()}`;
         const _nowEd = new Date();
         const txnTimestamp = `${_nowEd.getFullYear()}-${String(_nowEd.getMonth()+1).padStart(2,'0')}-${String(_nowEd.getDate()).padStart(2,'0')} ${String(_nowEd.getHours()).padStart(2,'0')}:${String(_nowEd.getMinutes()).padStart(2,'0')}`;
+        const mappedBankId = payMethod === 'Bank' ? (settings.defaultBankId || settings.bankAccounts?.[0]?.id || null) : null;
         await window.electronAPI.dbQuery(
           `INSERT INTO account_transactions 
-           (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-          [txnId, DEFAULT_SHOP_ID, payMethod === 'Bank' ? 'BANK' : 'CASH', 'INCOME', 'Sales Settlement', amountToPay, `Payment for Order ${order.id}`, txnTimestamp, timestamp, 'DollarSign']
+           (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon, bankAccountId) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+          [txnId, DEFAULT_SHOP_ID, payMethod === 'Bank' ? 'BANK' : 'CASH', 'INCOME', 'Sales Settlement', amountToPay, `Payment for Order ${order.id}`, txnTimestamp, timestamp, 'DollarSign', mappedBankId]
         );
 
         // Record payment

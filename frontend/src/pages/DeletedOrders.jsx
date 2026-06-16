@@ -112,8 +112,8 @@ export default function DeletedOrders() {
           const txnTimestamp = `${_nowD.getFullYear()}-${String(_nowD.getMonth()+1).padStart(2,'0')}-${String(_nowD.getDate()).padStart(2,'0')} ${String(_nowD.getHours()).padStart(2,'0')}:${String(_nowD.getMinutes()).padStart(2,'0')}`;
           await window.electronAPI.dbQuery(
             `INSERT INTO account_transactions 
-             (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon, bankAccountId) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               refundTxnId,
               orderToRefund.shopId || 'SHOP_01',
@@ -121,11 +121,12 @@ export default function DeletedOrders() {
               'EXPENSE',
               'Return',
               paidAmt,
-              `Return - Bill #${orderToRefund.id}`,
+              `Return - Bill ${orderToRefund.id.startsWith('#') ? '' : '#'}${orderToRefund.id}`,
               txnTimestamp,
               0,
               getLocalISOString(),
-              'Zap'
+              'Zap',
+              selectedRefundMethod === 'Bank' ? (settings.defaultBankId || settings.bankAccounts?.[0]?.id || null) : null
             ]
           );
         }

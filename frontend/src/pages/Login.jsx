@@ -60,7 +60,7 @@ export default function Login({ onLogin }) {
         identifier, 
         secret, 
         method,
-        twoFactor // Optional 2FA
+        twoFactor
       });
       
       if (response.data.token) {

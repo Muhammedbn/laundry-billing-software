@@ -40,6 +40,11 @@ export default function CancelledOrdersReport() {
   const [dateRange, setDateRange] = useState('Today');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, dateRange, customStart, customEnd]);
 
 
   const fetchData = async () => {
@@ -102,7 +107,9 @@ export default function CancelledOrdersReport() {
   const uniqueCustomers = new Set(filteredOrders.map(o => o.customerPhone || o.customerName)).size;
 
   /* ── Pagination ───────────────────────────────────── */
-  const paginated = filteredOrders;
+  const paginated = useMemo(() => {
+    return filteredOrders.slice((currentPage - 1) * 20, currentPage * 20);
+  }, [filteredOrders, currentPage]);
 
   /* ── CSV export ───────────────────────────────────── */
   const exportCSV = () => {
@@ -302,11 +309,48 @@ export default function CancelledOrdersReport() {
               </tfoot>
             </table>
 
-            {filteredOrders.length > 0 && (
-              <div className={styles.pagination}>
-                <span className={styles.paginationInfo}>Showing all {filteredOrders.length} orders</span>
-              </div>
-            )}
+            {filteredOrders.length > 0 && (() => {
+              const totalPages = Math.ceil(filteredOrders.length / 20);
+              if (totalPages <= 1) return null;
+              return (
+                <div className={styles.pagination} data-noprint="true">
+                  <span className={styles.paginationInfo}>
+                    Showing {Math.min(filteredOrders.length, (currentPage - 1) * 20 + 1)}-{Math.min(filteredOrders.length, currentPage * 20)} of {filteredOrders.length} orders
+                  </span>
+                  <div className={styles.paginationButtons}>
+                    <button 
+                      type="button"
+                      className={styles.pageBtn} 
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    >
+                      Previous
+                    </button>
+                    {[...Array(totalPages)].map((_, idx) => {
+                      const pageNum = idx + 1;
+                      return (
+                        <button 
+                          type="button"
+                          key={pageNum}
+                          className={`${styles.pageBtn} ${currentPage === pageNum ? styles.active : ''}`}
+                          onClick={() => setCurrentPage(pageNum)}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    <button 
+                      type="button"
+                      className={styles.pageBtn} 
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </>
         )}
       </motion.div>

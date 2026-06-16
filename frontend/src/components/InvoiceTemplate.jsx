@@ -1,4 +1,4 @@
-import { QRCodeCanvas } from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Activity, GripVertical, Pencil, Check, Plus, Trash2, X } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import CurrencySymbol from './CurrencySymbol';
@@ -240,7 +240,7 @@ export default function InvoiceTemplate({ order, settings, isPreview = false, on
           {showQrCode && (
             <div className={styles.compactHeaderRight}>
               <div className={styles.qrWrapperCompact}>
-                <QRCodeCanvas value={`ORDER:${order.id}`} size={55} />
+                <QRCodeSVG value={`ORDER:${order.id}`} size={55} />
               </div>
             </div>
           )}
@@ -532,7 +532,7 @@ export default function InvoiceTemplate({ order, settings, isPreview = false, on
             {showQrCode && (
               <div className={styles.complianceQrBox}>
                 <div className={styles.qrWrapper}>
-                  <QRCodeCanvas value={`ORDER:${order.id}`} size={85} />
+                  <QRCodeSVG value={`ORDER:${order.id}`} size={85} />
                 </div>
               </div>
             )}

@@ -461,6 +461,8 @@ ipcMain.handle('get-app-version', () => {
 
 // Native PDF generation via Electron (properly renders Arabic/RTL text)
 ipcMain.handle('print-to-pdf', async (event, options) => {
+  let printWin = null;
+  let tmpPath = '';
   try {
     const { filename = 'Invoice.pdf', html = '', css = '' } = options || {};
 
@@ -487,6 +489,24 @@ ipcMain.handle('print-to-pdf', async (event, options) => {
       color: #1E293B;
     }
     ${css}
+
+    /* Print Override Fixes to prevent blank/invisible pages */
+    @media print {
+      html, body, body * {
+        visibility: visible !important;
+      }
+      /* Keep specific elements hidden */
+      .topBar,
+      .footerActions,
+      .editModeBar,
+      .addItemRowBtn,
+      button,
+      [data-noprint="true"],
+      [data-noprint="true"] * {
+        visibility: hidden !important;
+        display: none !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -495,21 +515,79 @@ ipcMain.handle('print-to-pdf', async (event, options) => {
 </html>`;
 
     // Write to a temp file
-    const tmpPath = path.join(app.getPath('temp'), `invoice_print_${Date.now()}.html`);
+    tmpPath = path.join(app.getPath('temp'), `invoice_print_${Date.now()}.html`);
+    console.log("Printing HTML (first 1000 chars):", fullHtml.substring(0, 1000));
     fs.writeFileSync(tmpPath, fullHtml, 'utf8');
 
     // Open a hidden BrowserWindow just for printing
-    const printWin = new BrowserWindow({
+    printWin = new BrowserWindow({
       width: 600,
       height: 900,
       show: false,
-      webPreferences: { nodeIntegration: false, contextIsolation: true }
+      webPreferences: { 
+        nodeIntegration: false, 
+        contextIsolation: true,
+        paintWhenInitiallyHidden: true
+      }
     });
 
+    // Logging handler for loading failures
+    printWin.webContents.on('did-fail-load', (e, errorCode, errorDescription, validatedURL) => {
+      console.error(`Print Window failed to load: ${errorDescription} (Error Code: ${errorCode}), URL: ${validatedURL}`);
+    });
+
+    // Logging handler for console messages (detect missing fonts, bad resource links, etc.)
+    printWin.webContents.on('console-message', (e, level, message, line, sourceId) => {
+      const levels = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
+      console.log(`[Print Window Console] [${levels[level] || 'LOG'}] ${message} (Line: ${line}, Source: ${sourceId})`);
+    });
+
+    // Load the temp file and wait for load completion
     await printWin.loadFile(tmpPath);
 
-    // Wait for full render (fonts, images, React effects)
-    await new Promise(resolve => setTimeout(resolve, 800));
+    // Wait for all resources (images, fonts, stylesheets) to load fully in DOM
+    try {
+      await Promise.race([
+        printWin.webContents.executeJavaScript(`
+          new Promise((resolve) => {
+            const checkResources = () => {
+              const imgs = Array.from(document.querySelectorAll('img'));
+              const imgPromises = imgs.map(img => {
+                if (img.complete) return Promise.resolve();
+                return new Promise(r => {
+                  img.onload = r;
+                  img.onerror = (e) => {
+                    console.error('Print Window: Failed to load image resource:', img.src);
+                    r();
+                  };
+                });
+              });
+
+              const fontsPromise = document.fonts ? document.fonts.ready : Promise.resolve();
+
+              Promise.all([...imgPromises, fontsPromise])
+                .then(() => resolve(true))
+                .catch((err) => {
+                  console.error('Print Window: Error loading fonts/images:', err);
+                  resolve(false);
+                });
+            };
+
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+              checkResources();
+            } else {
+              window.addEventListener('DOMContentLoaded', checkResources);
+            }
+          });
+        `),
+        new Promise(resolve => setTimeout(resolve, 3000)) // Safety timeout threshold of 3 seconds
+      ]);
+    } catch (jsErr) {
+      console.warn('Print Window: Resource check scripting error (proceeding to print anyway):', jsErr.message);
+    }
+
+    // Delay to let Chromium layout/repaint the DOM before exporting
+    await new Promise(resolve => setTimeout(resolve, 250));
 
     // Print to PDF — exact A5: 148mm × 210mm
     const data = await printWin.webContents.printToPDF({
@@ -519,16 +597,24 @@ ipcMain.handle('print-to-pdf', async (event, options) => {
       marginsType: 1,
     });
 
-    printWin.close();
-
-    // Clean up temp file
-    try { fs.unlinkSync(tmpPath); } catch (_) {}
-
     fs.writeFileSync(filePath, data);
     return { success: true, filePath };
   } catch (err) {
     console.error('printToPDF error:', err);
     return { success: false, error: err.message };
+  } finally {
+    // Safely close the printing window
+    if (printWin) {
+      try {
+        printWin.close();
+      } catch (_) {}
+    }
+    // Clean up temporary HTML file
+    if (tmpPath && fs.existsSync(tmpPath)) {
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch (_) {}
+    }
   }
 });
 

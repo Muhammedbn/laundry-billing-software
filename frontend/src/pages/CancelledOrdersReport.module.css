@@ -393,6 +393,12 @@
   border-color: #CBD5E1;
 }
 
+.pageBtn.active {
+  background: #2563EB;
+  color: white;
+  border-color: #2563EB;
+}
+
 .pageBtn:disabled {
   opacity: 0.4;
   cursor: not-allowed;

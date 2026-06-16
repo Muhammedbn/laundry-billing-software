@@ -45,6 +45,7 @@ export default function Orders({ isPendingView = false }) {
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState(querySearch);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
   
   // Filtering logic
   const [showPayModal, setShowPayModal] = useState(false);
@@ -73,6 +74,10 @@ export default function Orders({ isPendingView = false }) {
   const [managerPinValue, setManagerPinValue] = useState('');
   const [managerPinError, setManagerPinError] = useState('');
   const [pendingPayStatus, setPendingPayStatus] = useState(null);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, isPendingView, pendingSubFilter, workflowFilter, dateRange, customStart, customEnd]);
 
   const checkCreditLimitBeforeUpdate = async (newPayStatus) => {
     if (!selectedOrder || !selectedOrder.customerId || selectedOrder.customerId === 'Walk-in') return false;
@@ -264,6 +269,10 @@ export default function Orders({ isPendingView = false }) {
       }
     }
   }
+
+  const paginatedOrders = React.useMemo(() => {
+    return filteredOrders.slice((currentPage - 1) * 20, currentPage * 20);
+  }, [filteredOrders, currentPage]);
 
   // Active orders only for financial KPIs and workflowCounts of active states
   const activeDateFilteredOrders = dateFilteredOrders.filter(o => !o.isDeleted);
@@ -548,8 +557,8 @@ export default function Orders({ isPendingView = false }) {
           const txnTimestamp = `${_now1.getFullYear()}-${String(_now1.getMonth()+1).padStart(2,'0')}-${String(_now1.getDate()).padStart(2,'0')} ${String(_now1.getHours()).padStart(2,'0')}:${String(_now1.getMinutes()).padStart(2,'0')}`;
           await window.electronAPI.dbQuery(
             `INSERT INTO account_transactions 
-             (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon, bankAccountId) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               refundTxnId,
               orderToDelete.shopId || DEFAULT_SHOP_ID || 'SHOP_01',
@@ -557,11 +566,12 @@ export default function Orders({ isPendingView = false }) {
               'EXPENSE',
               'Return',
               paidAmt,
-              `Return - Bill #${orderToDelete.id}`,
+              `Return - Bill ${orderToDelete.id.startsWith('#') ? '' : '#'}${orderToDelete.id}`,
               txnTimestamp,
               0,
               getLocalISOString(),
-              'Zap'
+              'Zap',
+              refundMethod === 'Bank' ? (settings.defaultBankId || settings.bankAccounts?.[0]?.id || null) : null
             ]
           );
         }
@@ -679,10 +689,12 @@ export default function Orders({ isPendingView = false }) {
   };
 
   const handlePrintTags = () => {
+    document.body.classList.add('printing-tags');
     setIsPrintingTags(true);
     setTimeout(() => {
       window.print();
       setIsPrintingTags(false);
+      document.body.classList.remove('printing-tags');
     }, 500);
   };
 
@@ -1034,8 +1046,8 @@ export default function Orders({ isPendingView = false }) {
       <div className={isPendingView ? styles.cardGridContainer : styles.tableCard}>
         {isPendingView ? (
           <div className={styles.orderListContainer}>
-            {filteredOrders.length > 0 ? (
-              filteredOrders.map((order) => (
+            {paginatedOrders.length > 0 ? (
+              paginatedOrders.map((order) => (
                 <div key={order.id} className={`${styles.premiumListItem} ${isOverdue(order) ? styles.overdueListItem : ''}`}>
                   <div className={styles.listIdSection}>
                     <span className={styles.listIdLabel}>{t('order', settings.language).toUpperCase()}</span>
@@ -1137,8 +1149,8 @@ export default function Orders({ isPendingView = false }) {
                     {t('loading', settings.language)}
                   </td>
                 </tr>
-              ) : filteredOrders.length > 0 ? (
-                filteredOrders.map((order) => (
+              ) : paginatedOrders.length > 0 ? (
+                paginatedOrders.map((order) => (
                   <tr key={order.id || order._id} className={styles.orderRow} onClick={() => {
                     setSelectedOrder(order);
                     setShowStatusModal(true);
@@ -1290,6 +1302,46 @@ export default function Orders({ isPendingView = false }) {
             </tbody>
           </table>
         )}
+
+        {(() => {
+          const totalPages = Math.ceil(filteredOrders.length / 20);
+          if (totalPages <= 1 || loading) return null;
+          return (
+            <div className={styles.pagination} data-noprint="true">
+              <span className={styles.paginationInfo}>
+                Showing {Math.min(filteredOrders.length, (currentPage - 1) * 20 + 1)}-{Math.min(filteredOrders.length, currentPage * 20)} of {filteredOrders.length} orders
+              </span>
+              <div className={styles.paginationBtns}>
+                <button 
+                  className={styles.pageBtn} 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                >
+                  Previous
+                </button>
+                {[...Array(totalPages)].map((_, idx) => {
+                  const pageNum = idx + 1;
+                  return (
+                    <button 
+                      key={pageNum}
+                      className={`${styles.pageBtn} ${currentPage === pageNum ? styles.active : ''}`}
+                      onClick={() => setCurrentPage(pageNum)}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button 
+                  className={styles.pageBtn} 
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Order Details Drawer/Modal */}

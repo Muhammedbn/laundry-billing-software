@@ -709,11 +709,12 @@ export default function POS() {
 
         if (paymentMethod !== 'credit') {
           const desc = `Order ${orderId}${accountType === 'BANK' ? ` via ${selectedBank}` : ''}`;
+          const mappedBankId = accountType === 'BANK' ? (settings.bankAccounts?.find(acc => acc.bankName === selectedBank || acc.id === selectedBank)?.id || selectedBank) : null;
           await window.electronAPI.dbQuery(
             `INSERT INTO account_transactions 
              (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon, bankAccountId) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [txnId, DEFAULT_SHOP_ID, accountType, 'INCOME', 'Sales', total, desc, txnTimestamp, 0, getLocalISOString(), 'ShoppingBag', accountType === 'BANK' ? selectedBank : null]
+            [txnId, DEFAULT_SHOP_ID, accountType, 'INCOME', 'Sales', total, desc, txnTimestamp, 0, getLocalISOString(), 'ShoppingBag', mappedBankId]
           );
         }
 

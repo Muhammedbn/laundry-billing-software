@@ -26,7 +26,6 @@ export default function Settings() {
   const [enteredPin, setEnteredPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [creditLimitInput, setCreditLimitInput] = useState('');
-  const [oldPinInput, setOldPinInput] = useState('');
   const [newPinInput, setNewPinInput] = useState('');
   const [pinChangeError, setPinChangeError] = useState('');
   const [pinChangeSuccess, setPinChangeSuccess] = useState('');
@@ -741,7 +740,7 @@ export default function Settings() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '300px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>Current PIN</span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>New PIN</span>
                       <div className={styles.inputWrapper}>
                         <Lock size={18} color="#94A3B8" />
                         <input
@@ -749,38 +748,16 @@ export default function Settings() {
                           maxLength={4}
                           className={styles.inputField}
                           placeholder="••••"
-                          value={oldPinInput}
+                          value={newPinInput}
                           onChange={(e) => {
                             const val = e.target.value.replace(/\D/g, '');
-                            setOldPinInput(val);
+                            setNewPinInput(val);
                             setPinChangeError('');
                             setPinChangeSuccess('');
                           }}
                         />
                       </div>
                     </div>
-
-                    {oldPinInput === (settings.orderDeletePin || '0000') && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', animation: 'fadeIn 0.3s ease' }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>New PIN</span>
-                        <div className={styles.inputWrapper}>
-                          <Lock size={18} color="#94A3B8" />
-                          <input
-                            type="password"
-                            maxLength={4}
-                            className={styles.inputField}
-                            placeholder="••••"
-                            value={newPinInput}
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/\D/g, '');
-                              setNewPinInput(val);
-                              setPinChangeError('');
-                              setPinChangeSuccess('');
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
 
                     {pinChangeError && (
                       <p style={{ color: '#DC2626', fontSize: '0.75rem', fontWeight: 600, margin: 0 }}>
@@ -794,7 +771,7 @@ export default function Settings() {
                       </p>
                     )}
 
-                    {oldPinInput === (settings.orderDeletePin || '0000') && newPinInput.length === 4 && (
+                    {newPinInput.length === 4 && (
                       <button
                         type="button"
                         className={styles.primaryBtn}
@@ -802,7 +779,6 @@ export default function Settings() {
                         onClick={() => {
                           updateSettings({ orderDeletePin: newPinInput });
                           setPinChangeSuccess('PIN updated successfully!');
-                          setOldPinInput('');
                           setNewPinInput('');
                         }}
                       >

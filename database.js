@@ -142,7 +142,9 @@ function initDB(appPath) {
       description TEXT,
       date TEXT,
       isSynced INTEGER DEFAULT 0,
-      updatedAt TEXT
+      updatedAt TEXT,
+      icon TEXT,
+      bankAccountId TEXT
     );
 
     CREATE TABLE IF NOT EXISTS sync_state (

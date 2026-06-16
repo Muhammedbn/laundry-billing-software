@@ -99,13 +99,14 @@
 
 /* Print Optimization */
 @media print {
-  body * {
+  :global(body.printing-tags) * {
     visibility: hidden;
   }
-  .tagContainer, .tagContainer * {
+  :global(body.printing-tags) .tagContainer,
+  :global(body.printing-tags) .tagContainer * {
     visibility: visible;
   }
-  .tagContainer {
+  :global(body.printing-tags) .tagContainer {
     position: absolute;
     left: 0;
     top: 0;
@@ -113,7 +114,7 @@
     display: block;
     padding: 0;
   }
-  .dressTag {
+  :global(body.printing-tags) .dressTag {
     border: 1px solid black;
     margin-bottom: 10px;
     page-break-inside: avoid;

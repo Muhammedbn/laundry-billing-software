@@ -192,11 +192,12 @@ export default function Customers() {
         const _nowC = new Date();
         const txnTimestamp = `${_nowC.getFullYear()}-${String(_nowC.getMonth()+1).padStart(2,'0')}-${String(_nowC.getDate()).padStart(2,'0')} ${String(_nowC.getHours()).padStart(2,'0')}:${String(_nowC.getMinutes()).padStart(2,'0')}`;
         
+        const mappedBankId = paymentData.method === 'Bank' ? (settings.defaultBankId || settings.bankAccounts?.[0]?.id || null) : null;
         await window.electronAPI.dbQuery(
           `INSERT INTO account_transactions 
-           (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [txnId, DEFAULT_SHOP_ID, paymentData.method === 'Bank' ? 'BANK' : 'CASH', 'INCOME', 'Credit Settlement', totalPaid, `Settlement from ${selectedCustomer.name}`, txnTimestamp, 0, timestamp, 'DollarSign']
+           (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon, bankAccountId) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [txnId, DEFAULT_SHOP_ID, paymentData.method === 'Bank' ? 'BANK' : 'CASH', 'INCOME', 'Credit Settlement', totalPaid, `Settlement from ${selectedCustomer.name}`, txnTimestamp, 0, timestamp, 'DollarSign', mappedBankId]
         );
 
         if (window.electronAPI?.runDataHealer) {
@@ -304,8 +305,9 @@ export default function Customers() {
     }
   };
 
-  const startIndex = 0;
-  const paginatedCustomers = customers;
+  const paginatedCustomers = React.useMemo(() => {
+    return customers.slice((currentPage - 1) * 20, currentPage * 20);
+  }, [customers, currentPage]);
 
   const totalReceivables = customers.reduce((sum, c) => sum + (c.balance > 0 ? c.balance : 0), 0);
   const totalAdvances = customers.reduce((sum, c) => sum + (c.balance < 0 ? Math.abs(c.balance) : 0), 0);
@@ -537,13 +539,45 @@ export default function Customers() {
           </tbody>
         </table>
 
-        {customers.length > 0 && (
-          <div className={styles.pagination}>
-            <span className={styles.paginationInfo}>
-              Showing all {customers.length} customers
-            </span>
-          </div>
-        )}
+        {(() => {
+          const totalPages = Math.ceil(customers.length / 20);
+          if (totalPages <= 1 || loading) return null;
+          return (
+            <div className={styles.pagination} data-noprint="true">
+              <span className={styles.paginationInfo}>
+                Showing {Math.min(customers.length, (currentPage - 1) * 20 + 1)}-{Math.min(customers.length, currentPage * 20)} of {customers.length} customers
+              </span>
+              <div className={styles.paginationBtns}>
+                <button 
+                  className={styles.pageBtn} 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                >
+                  Previous
+                </button>
+                {[...Array(totalPages)].map((_, idx) => {
+                  const pageNum = idx + 1;
+                  return (
+                    <button 
+                      key={pageNum}
+                      className={`${styles.pageBtn} ${currentPage === pageNum ? styles.active : ''}`}
+                      onClick={() => setCurrentPage(pageNum)}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button 
+                  className={styles.pageBtn} 
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
 

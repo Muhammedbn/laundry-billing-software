@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Search, User, Download, Printer, FileText, Calendar,
   ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight,
@@ -12,6 +12,7 @@ import styles from './CustomerStatement.module.css';
 
 export default function CustomerStatement() {
   const { customerId } = useParams();
+  const navigate = useNavigate();
   const { settings, formatDate } = useSettings();
   const printRef = useRef(null);
 
@@ -21,7 +22,7 @@ export default function CustomerStatement() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const [dateRange, setDateRange] = useState('Today');
+  const [dateRange, setDateRange] = useState('All');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [filterType, setFilterType] = useState('All'); // All | Orders | Payments
@@ -30,6 +31,11 @@ export default function CustomerStatement() {
   const [orders, setOrders] = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCustomer, dateRange, dateFrom, dateTo, filterType, sortOrder]);
 
   const dropdownRef = useRef(null);
   const inputRef = useRef(null);
@@ -37,21 +43,28 @@ export default function CustomerStatement() {
   /* ─── Sync dateFrom and dateTo based on dateRange ─── */
   useEffect(() => {
     const now = new Date();
+    const toLocalDateString = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
     if (dateRange === 'Today') {
-      const todayStr = now.toISOString().split('T')[0];
+      const todayStr = toLocalDateString(now);
       setDateFrom(todayStr);
       setDateTo(todayStr);
 
     } else if (dateRange === 'This Month') {
       const start = new Date(now.getFullYear(), now.getMonth(), 1);
       const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      setDateFrom(start.toISOString().split('T')[0]);
-      setDateTo(end.toISOString().split('T')[0]);
+      setDateFrom(toLocalDateString(start));
+      setDateTo(toLocalDateString(end));
     } else if (dateRange === 'This Year') {
       const start = new Date(now.getFullYear(), 0, 1);
       const end = new Date(now.getFullYear(), 11, 31);
-      setDateFrom(start.toISOString().split('T')[0]);
-      setDateTo(end.toISOString().split('T')[0]);
+      setDateFrom(toLocalDateString(start));
+      setDateTo(toLocalDateString(end));
     } else if (dateRange === 'All') {
       setDateFrom('');
       setDateTo('');
@@ -321,7 +334,15 @@ export default function CustomerStatement() {
     allPayments.forEach(p => rows.push(p));
 
     /* Sort chronologically (ascending) first to calculate running balance */
-    rows.sort((a, b) => new Date(a.date) - new Date(b.date));
+    rows.sort((a, b) => {
+      const diff = new Date(a.date) - new Date(b.date);
+      if (diff !== 0) return diff;
+      const aIsDebit = a.debit > 0;
+      const bIsDebit = b.debit > 0;
+      if (aIsDebit && !bIsDebit) return -1;
+      if (!aIsDebit && bIsDebit) return 1;
+      return 0;
+    });
 
     /* Running balance */
     let balance = 0;
@@ -342,11 +363,24 @@ export default function CustomerStatement() {
 
     /* Sort according to user preference */
     if (sortOrder === 'desc') {
-      rows.sort((a, b) => new Date(b.date) - new Date(a.date));
+      rows.sort((a, b) => {
+        const diff = new Date(b.date) - new Date(a.date);
+        if (diff !== 0) return diff;
+        const aIsCredit = a.credit > 0;
+        const bIsCredit = b.credit > 0;
+        if (aIsCredit && !bIsCredit) return -1;
+        if (!aIsCredit && bIsCredit) return 1;
+        return 0;
+      });
     }
 
     return rows;
   }, [orders, payments, filterType, sortOrder]);
+
+  const paginatedLedgerRows = React.useMemo(() => {
+    const startIndex = (currentPage - 1) * 20;
+    return ledgerRows.slice(startIndex, startIndex + 20);
+  }, [ledgerRows, currentPage]);
 
   /* ─── KPIs ────────────────────────────────────────── */
   const totalBilled    = orders.filter(o => !o.isDeleted).reduce((s, o) => s + (o.totalAmount || 0), 0);
@@ -370,7 +404,12 @@ export default function CustomerStatement() {
     const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `statement_${selectedCustomer?.name?.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.csv`;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const localDateStr = `${year}-${month}-${day}`;
+    a.download = `statement_${selectedCustomer?.name?.replace(/\s+/g,'_')}_${localDateStr}.csv`;
     a.click();
   };
 
@@ -585,7 +624,7 @@ export default function CustomerStatement() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ledgerRows.map((row, idx) => (
+                  {paginatedLedgerRows.map((row, idx) => (
                     <tr key={idx} className={`${styles.ledgerRow} ${row.type === 'payment' ? styles.paymentRow : styles.orderRow}`}>
                       <td className={styles.dateCell}>
                         <div>{formatDate(row.date)}</div>
@@ -601,7 +640,19 @@ export default function CustomerStatement() {
                             ? <RotateCcw size={13} color="#F59E0B" />
                             : <Wallet size={13} color="#10B981" />
                           }
-                          <span className={styles.refText}>{row.ref}</span>
+                          {['order', 'deleted_order', 'refund'].includes(row.type) ? (
+                            <span 
+                              className={`${styles.refText} ${styles.refLink}`}
+                              onClick={() => {
+                                const orderIdClean = row.ref.replace('REF-', '').replace('#', '');
+                                navigate(`/invoice/${orderIdClean}`);
+                              }}
+                            >
+                              {row.ref}
+                            </span>
+                          ) : (
+                            <span className={styles.refText}>{row.ref}</span>
+                          )}
                         </div>
                       </td>
                       <td className={styles.descCell}>
@@ -639,6 +690,47 @@ export default function CustomerStatement() {
                 </tfoot>
               </table>
             )}
+            {/* Pagination Controls */}
+            {(() => {
+              const totalPages = Math.ceil(ledgerRows.length / 20);
+              if (totalPages <= 1 || loading) return null;
+
+              return (
+                <div className={styles.paginationRow} data-noprint="true">
+                  <span className={styles.paginationInfo}>
+                    Showing {Math.min(ledgerRows.length, (currentPage - 1) * 20 + 1)}-{Math.min(ledgerRows.length, currentPage * 20)} of {ledgerRows.length} transactions
+                  </span>
+                  <div className={styles.paginationBtns}>
+                    <button 
+                      className={styles.paginationBtn} 
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    >
+                      Previous
+                    </button>
+                    {[...Array(totalPages)].map((_, idx) => {
+                      const pageNum = idx + 1;
+                      return (
+                        <button 
+                          key={pageNum}
+                          className={`${styles.paginationBtn} ${currentPage === pageNum ? styles.paginationActiveBtn : ''}`}
+                          onClick={() => setCurrentPage(pageNum)}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    <button 
+                      className={styles.paginationBtn} 
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Print Footer */}

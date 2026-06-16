@@ -22,7 +22,7 @@ export default function OutstandingBills() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('All'); // All, Overdue, Due Soon
   const [globalOutstanding, setGlobalOutstanding] = useState(0);
-  const [dateRange, setDateRange] = useState('Today');
+  const [dateRange, setDateRange] = useState('All');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 

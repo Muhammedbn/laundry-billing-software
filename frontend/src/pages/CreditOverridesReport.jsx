@@ -43,6 +43,11 @@ export default function CreditOverridesReport() {
   const [actionFilter, setActionFilter] = useState('APPROVED');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, dateRange, actionFilter, customStart, customEnd]);
 
   useEffect(() => {
     const fetchStaff = async () => {
@@ -163,6 +168,10 @@ export default function CreditOverridesReport() {
       return true;
     });
   }, [logs, searchTerm]);
+
+  const paginatedLogs = useMemo(() => {
+    return filteredLogs.slice((currentPage - 1) * 20, currentPage * 20);
+  }, [filteredLogs, currentPage]);
 
   // KPIs
   const totalApproved = logs.filter(l => l.actionType === 'APPROVED').length;
@@ -320,7 +329,7 @@ export default function CreditOverridesReport() {
                 </tr>
               </thead>
               <tbody>
-                {filteredLogs.map((log, idx) => {
+                {paginatedLogs.map((log, idx) => {
                   let actionBadgeClass = styles.badgeRejected;
                   if (log.actionType === 'APPROVED') actionBadgeClass = styles.badgeApproved;
                   if (log.actionType === 'FAILED_PIN') actionBadgeClass = styles.badgeFailed;
@@ -364,6 +373,46 @@ export default function CreditOverridesReport() {
             </table>
           </div>
         )}
+
+        {(() => {
+          const totalPages = Math.ceil(filteredLogs.length / 20);
+          if (totalPages <= 1 || loading) return null;
+          return (
+            <div className={styles.paginationRow} data-noprint="true" style={{ marginTop: '1.5rem' }}>
+              <span className={styles.paginationInfo}>
+                Showing {Math.min(filteredLogs.length, (currentPage - 1) * 20 + 1)}-{Math.min(filteredLogs.length, currentPage * 20)} of {filteredLogs.length} entries
+              </span>
+              <div className={styles.paginationBtns}>
+                <button 
+                  className={styles.paginationBtn} 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                >
+                  Previous
+                </button>
+                {[...Array(totalPages)].map((_, idx) => {
+                  const pageNum = idx + 1;
+                  return (
+                    <button 
+                      key={pageNum}
+                      className={`${styles.paginationBtn} ${currentPage === pageNum ? styles.paginationActiveBtn : ''}`}
+                      onClick={() => setCurrentPage(pageNum)}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button 
+                  className={styles.paginationBtn} 
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </motion.div>
     </motion.div>
   );

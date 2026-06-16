@@ -46,6 +46,11 @@ export default function DailyTaxReport() {
   const [dateRange, setDateRange] = useState('This Month');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [dateRange, customStartDate, customEndDate]);
 
   const parseDateSafe = (dateStr) => {
     if (!dateStr) return new Date();
@@ -266,6 +271,10 @@ export default function DailyTaxReport() {
     return list.sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [orders, expenses, settings]);
 
+  const paginatedDailyData = useMemo(() => {
+    return dailyData.slice((currentPage - 1) * 20, currentPage * 20);
+  }, [dailyData, currentPage]);
+
   // Aggregate stats over filtered range
   const totals = useMemo(() => {
     let salesGross = 0;
@@ -446,8 +455,8 @@ export default function DailyTaxReport() {
                 <tr>
                    <td colSpan="5" className={styles.emptyRow}>Loading daily tax data...</td>
                 </tr>
-              ) : dailyData.length > 0 ? (
-                dailyData.map((day, idx) => (
+              ) : paginatedDailyData.length > 0 ? (
+                paginatedDailyData.map((day, idx) => (
                   <tr key={`${day.date}-${idx}`}>
                     <td className={styles.dateCell}>
                       {formatDate(`${day.date}T00:00:00Z`)}
@@ -477,13 +486,45 @@ export default function DailyTaxReport() {
           </table>
         </div>
         
-        {!loading && dailyData.length > 0 && (
-          <div className={styles.pagination}>
-            <span className={styles.paginationInfo}>
-              Showing all {dailyData.length} active dates
-            </span>
-          </div>
-        )}
+        {!loading && dailyData.length > 0 && (() => {
+          const totalPages = Math.ceil(dailyData.length / 20);
+          if (totalPages <= 1) return null;
+          return (
+            <div className={styles.pagination} data-noprint="true">
+              <span className={styles.paginationInfo}>
+                Showing {Math.min(dailyData.length, (currentPage - 1) * 20 + 1)}-{Math.min(dailyData.length, currentPage * 20)} of {dailyData.length} active dates
+              </span>
+              <div className={styles.paginationBtns}>
+                <button 
+                  className={styles.paginationBtn} 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                >
+                  Previous
+                </button>
+                {[...Array(totalPages)].map((_, idx) => {
+                  const pageNum = idx + 1;
+                  return (
+                    <button 
+                      key={pageNum}
+                      className={`${styles.paginationBtn} ${currentPage === pageNum ? styles.paginationActiveBtn : ''}`}
+                      onClick={() => setCurrentPage(pageNum)}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button 
+                  className={styles.paginationBtn} 
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </motion.div>
   );

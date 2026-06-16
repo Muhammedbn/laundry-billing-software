@@ -42,6 +42,13 @@ export default function Settlement() {
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [notes, setNotes] = useState('');
   const [selectedBank, setSelectedBank] = useState('');
+  const [pendingPage, setPendingPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
+
+  useEffect(() => {
+    setPendingPage(1);
+    setHistoryPage(1);
+  }, [selectedCustomer, workspaceTab]);
 
   useEffect(() => {
     if (settings.bankAccounts && settings.bankAccounts.length > 0 && !selectedBank) {
@@ -298,6 +305,7 @@ export default function Settlement() {
         // 3. Record Transaction in Accounts
         const txnId = `TXN-${Date.now()}`;
         const txnTimestamp = getLocalDateTime();
+        const mappedBankId = paymentMethod === 'Bank' ? (settings.bankAccounts?.find(acc => acc.bankName === selectedBank || acc.id === selectedBank)?.id || selectedBank) : null;
         await window.electronAPI.dbQuery(
           `INSERT INTO account_transactions 
            (id, shopId, accountType, type, category, amount, description, date, isSynced, updatedAt, icon, bankAccountId) 
@@ -313,7 +321,7 @@ export default function Settlement() {
             txnTimestamp,
             timestamp,
             'DollarSign',
-            paymentMethod === 'Bank' ? selectedBank : null
+            mappedBankId
           ]
         );
 
@@ -345,6 +353,14 @@ export default function Settlement() {
   const displayDue = selectedCustomer ? Math.max(0, Number(selectedCustomer.balance) || 0) : 0;
   const currentNetBalance = selectedCustomer ? (Number(selectedCustomer.balance) || 0) : 0;
   const simulatedNewBalance = currentNetBalance - (parseFloat(paymentAmount) || 0);
+
+  const paginatedPending = React.useMemo(() => {
+    return (globalData.pending || []).slice((pendingPage - 1) * 20, pendingPage * 20);
+  }, [globalData.pending, pendingPage]);
+
+  const paginatedHistory = React.useMemo(() => {
+    return (globalData.history || []).slice((historyPage - 1) * 20, historyPage * 20);
+  }, [globalData.history, historyPage]);
 
   return (
     <div className={styles.settlementContainer}>
@@ -683,7 +699,7 @@ export default function Settlement() {
                         </tr>
                       </thead>
                       <tbody>
-                        {globalData.pending.map(bill => {
+                        {paginatedPending.map(bill => {
                           const invoiceDate = formatDate(bill.createdAt);
                           
                           return (
@@ -729,6 +745,49 @@ export default function Settlement() {
                         )}
                       </tbody>
                     </table>
+
+                    {(() => {
+                      const totalPages = Math.ceil(globalData.pending.length / 20);
+                      if (totalPages <= 1 || loading) return null;
+                      return (
+                        <div className={styles.paginationRow} data-noprint="true">
+                          <span className={styles.paginationInfo}>
+                            Showing {Math.min(globalData.pending.length, (pendingPage - 1) * 20 + 1)}-{Math.min(globalData.pending.length, pendingPage * 20)} of {globalData.pending.length} pending bills
+                          </span>
+                          <div className={styles.paginationBtns}>
+                            <button 
+                              type="button"
+                              className={styles.paginationBtn} 
+                              disabled={pendingPage === 1}
+                              onClick={() => setPendingPage(prev => Math.max(prev - 1, 1))}
+                            >
+                              Previous
+                            </button>
+                            {[...Array(totalPages)].map((_, idx) => {
+                              const pageNum = idx + 1;
+                              return (
+                                <button 
+                                  type="button"
+                                  key={pageNum}
+                                  className={`${styles.paginationBtn} ${pendingPage === pageNum ? styles.paginationActiveBtn : ''}`}
+                                  onClick={() => setPendingPage(pageNum)}
+                                >
+                                  {pageNum}
+                                </button>
+                              );
+                            })}
+                            <button 
+                              type="button"
+                              className={styles.paginationBtn} 
+                              disabled={pendingPage === totalPages}
+                              onClick={() => setPendingPage(prev => Math.min(prev + 1, totalPages))}
+                            >
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className={styles.tableWrapper}>
@@ -744,7 +803,7 @@ export default function Settlement() {
                         </tr>
                       </thead>
                       <tbody>
-                        {globalData.history.map(pay => {
+                        {paginatedHistory.map(pay => {
                           const payDate = formatDate(pay.createdAt);
                           
                           return (
@@ -773,6 +832,49 @@ export default function Settlement() {
                         )}
                       </tbody>
                     </table>
+
+                    {(() => {
+                      const totalPages = Math.ceil(globalData.history.length / 20);
+                      if (totalPages <= 1 || loading) return null;
+                      return (
+                        <div className={styles.paginationRow} data-noprint="true">
+                          <span className={styles.paginationInfo}>
+                            Showing {Math.min(globalData.history.length, (historyPage - 1) * 20 + 1)}-{Math.min(globalData.history.length, historyPage * 20)} of {globalData.history.length} settlements
+                          </span>
+                          <div className={styles.paginationBtns}>
+                            <button 
+                              type="button"
+                              className={styles.paginationBtn} 
+                              disabled={historyPage === 1}
+                              onClick={() => setHistoryPage(prev => Math.max(prev - 1, 1))}
+                            >
+                              Previous
+                            </button>
+                            {[...Array(totalPages)].map((_, idx) => {
+                              const pageNum = idx + 1;
+                              return (
+                                <button 
+                                  type="button"
+                                  key={pageNum}
+                                  className={`${styles.paginationBtn} ${historyPage === pageNum ? styles.paginationActiveBtn : ''}`}
+                                  onClick={() => setHistoryPage(pageNum)}
+                                >
+                                  {pageNum}
+                                </button>
+                              );
+                            })}
+                            <button 
+                              type="button"
+                              className={styles.paginationBtn} 
+                              disabled={historyPage === totalPages}
+                              onClick={() => setHistoryPage(prev => Math.min(prev + 1, totalPages))}
+                            >
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

@@ -231,10 +231,12 @@ export default function Invoice() {
   };
 
   const handlePrintTags = () => {
+    document.body.classList.add('printing-tags');
     setIsPrintingTags(true);
     setTimeout(() => {
       window.print();
       setIsPrintingTags(false);
+      document.body.classList.remove('printing-tags');
     }, 500);
   };
 
@@ -244,12 +246,12 @@ export default function Invoice() {
     <div className={styles.invoicePage}>
       {/* Top Bar */}
       <div className={styles.topBar}>
-        <div className={styles.backBtn} onClick={() => navigate('/orders')}>
+        <div className={styles.backBtn} onClick={() => navigate(-1)}>
           <ArrowLeft size={20} />
-          <span>Invoice Management</span>
+          <span>Back</span>
         </div>
         <div className={styles.topActions}>
-          <button className={styles.closeBtn} onClick={() => navigate('/orders')}>
+          <button className={styles.closeBtn} onClick={() => navigate(-1)}>
             <X size={18} /> Close
           </button>
           <button className="btn btn-primary" onClick={() => navigate('/pos')}>

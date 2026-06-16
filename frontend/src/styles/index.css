@@ -171,6 +171,7 @@ body {
 }
 
 @media print {
+  [data-noprint="true"],
   /* Hide all navigation and sidebars */
   header, 
   aside, 

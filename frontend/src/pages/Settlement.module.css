@@ -1210,3 +1210,56 @@
     height: calc(100vh - 64px - 1rem);
   }
 }
+
+/* Pagination Styling */
+.paginationRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #E2E8F0;
+  background: #F8FAFC;
+  border-radius: var(--radius-md);
+  margin-top: 1rem;
+}
+
+.paginationInfo {
+  font-size: 0.85rem;
+  color: #64748B;
+  font-weight: 500;
+}
+
+.paginationBtns {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.paginationBtn {
+  background: white;
+  border: 1px solid #E2E8F0;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.paginationBtn:hover:not(:disabled) {
+  background: #F1F5F9;
+  color: #1E293B;
+  border-color: #CBD5E1;
+}
+
+.paginationBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.paginationActiveBtn {
+  background: #2563EB;
+  color: white;
+  border-color: #2563EB;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15);
+}

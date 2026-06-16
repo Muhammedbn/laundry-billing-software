@@ -19,10 +19,58 @@ export default function Services({ defaultTab = 'list' }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchTerm, selectedCategoryFilter]);
 
   useEffect(() => {
     setActiveTab(defaultTab);
   }, [defaultTab]);
+
+  const renderPagination = (items, page, setPage, label) => {
+    const totalPages = Math.ceil(items.length / 20);
+    if (totalPages <= 1 || loading) return null;
+    return (
+      <div className={styles.paginationRow} data-noprint="true" style={{ marginTop: '1.5rem' }}>
+        <span className={styles.paginationInfo}>
+          Showing {Math.min(items.length, (page - 1) * 20 + 1)}-{Math.min(items.length, page * 20)} of {items.length} {label}
+        </span>
+        <div className={styles.paginationBtns}>
+          <button 
+            type="button"
+            className={styles.paginationBtn} 
+            disabled={page === 1}
+            onClick={() => setPage(prev => Math.max(prev - 1, 1))}
+          >
+            Previous
+          </button>
+          {[...Array(totalPages)].map((_, idx) => {
+            const pageNum = idx + 1;
+            return (
+              <button 
+                type="button"
+                key={pageNum}
+                className={`${styles.paginationBtn} ${page === pageNum ? styles.paginationActiveBtn : ''}`}
+                onClick={() => setPage(pageNum)}
+              >
+                {pageNum}
+              </button>
+            );
+          })}
+          <button 
+            type="button"
+            className={styles.paginationBtn} 
+            disabled={page === totalPages}
+            onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   // Form & view states
   const [showModal, setShowModal] = useState(null); // 'service', 'type', 'addon', 'category'
@@ -381,6 +429,11 @@ export default function Services({ defaultTab = 'list' }) {
         const filteredAddons = addons.filter(a => (a?.name || '').toLowerCase().includes(searchLower));
         const filteredCategories = categories.filter(c => (c?.name || '').toLowerCase().includes(searchLower));
 
+        const paginatedServices = filteredServices.slice((currentPage - 1) * 20, currentPage * 20);
+        const paginatedTypes = filteredTypes.slice((currentPage - 1) * 20, currentPage * 20);
+        const paginatedAddons = filteredAddons.slice((currentPage - 1) * 20, currentPage * 20);
+        const paginatedCategories = filteredCategories.slice((currentPage - 1) * 20, currentPage * 20);
+
         if (loading) {
           return (
             <div className={styles.emptyStateContainer}>
@@ -413,7 +466,7 @@ export default function Services({ defaultTab = 'list' }) {
           return (
             <div className={styles.listItemWrapper}>
               <div className={styles.list}>
-                {filteredServices.map(s => {
+                {paginatedServices.map(s => {
                   let pricingList = [];
                   try {
                     pricingList = typeof s.pricing === 'string' ? JSON.parse(s.pricing || '[]') : (s.pricing || []);
@@ -466,6 +519,7 @@ export default function Services({ defaultTab = 'list' }) {
                   );
                 })}
               </div>
+              {renderPagination(filteredServices, currentPage, setCurrentPage, 'services')}
             </div>
           );
         }
@@ -488,22 +542,25 @@ export default function Services({ defaultTab = 'list' }) {
           }
 
           return (
-            <div className={styles.treatmentsGrid}>
-              {filteredTypes.map((t, idx) => (
-                <div key={idx} className={styles.treatmentCard}>
-                  <div className={styles.treatmentIconBox}>
-                    <Zap size={20} />
+            <div>
+              <div className={styles.treatmentsGrid}>
+                {paginatedTypes.map((t, idx) => (
+                  <div key={idx} className={styles.treatmentCard}>
+                    <div className={styles.treatmentIconBox}>
+                      <Zap size={20} />
+                    </div>
+                    <div className={styles.treatmentInfo}>
+                      <h4 className={styles.treatmentName}>{t.name}</h4>
+                      <span className={styles.treatmentMeta}>Active treatment model</span>
+                    </div>
+                    <div className={styles.treatmentActions}>
+                      <button className={styles.iconActionBtn} onClick={() => handleEdit(t, 'type')} title="Edit"><Edit2 size={15} /></button>
+                      <button className={`${styles.iconActionBtn} ${styles.delete}`} onClick={() => handleDelete(t.id, 'service_types')} title="Delete"><Trash2 size={15} /></button>
+                    </div>
                   </div>
-                  <div className={styles.treatmentInfo}>
-                    <h4 className={styles.treatmentName}>{t.name}</h4>
-                    <span className={styles.treatmentMeta}>Active treatment model</span>
-                  </div>
-                  <div className={styles.treatmentActions}>
-                    <button className={styles.iconActionBtn} onClick={() => handleEdit(t, 'type')} title="Edit"><Edit2 size={15} /></button>
-                    <button className={`${styles.iconActionBtn} ${styles.delete}`} onClick={() => handleDelete(t.id, 'service_types')} title="Delete"><Trash2 size={15} /></button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              {renderPagination(filteredTypes, currentPage, setCurrentPage, 'treatments')}
             </div>
           );
         }
@@ -526,24 +583,27 @@ export default function Services({ defaultTab = 'list' }) {
           }
 
           return (
-            <div className={styles.addonsGrid}>
-              {filteredAddons.map((a, idx) => (
-                <div key={idx} className={styles.addonCard}>
-                  <div className={styles.addonIconBox}>
-                    <Sparkles size={20} />
+            <div>
+              <div className={styles.addonsGrid}>
+                {paginatedAddons.map((a, idx) => (
+                  <div key={idx} className={styles.addonCard}>
+                    <div className={styles.addonIconBox}>
+                      <Sparkles size={20} />
+                    </div>
+                    <div className={styles.addonDetails}>
+                      <h4 className={styles.addonTitle}>{a.name}</h4>
+                      <span className={styles.addonPriceBadge}>
+                        +<CurrencySymbol size={12} /> {parseFloat(a.price).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className={styles.addonActions}>
+                      <button className={styles.iconActionBtn} onClick={() => handleEdit(a, 'addon')} title="Edit"><Edit2 size={15} /></button>
+                      <button className={`${styles.iconActionBtn} ${styles.delete}`} onClick={() => handleDelete(a.id, 'addons')} title="Delete"><Trash2 size={15} /></button>
+                    </div>
                   </div>
-                  <div className={styles.addonDetails}>
-                    <h4 className={styles.addonTitle}>{a.name}</h4>
-                    <span className={styles.addonPriceBadge}>
-                      +<CurrencySymbol size={12} /> {parseFloat(a.price).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className={styles.addonActions}>
-                    <button className={styles.iconActionBtn} onClick={() => handleEdit(a, 'addon')} title="Edit"><Edit2 size={15} /></button>
-                    <button className={`${styles.iconActionBtn} ${styles.delete}`} onClick={() => handleDelete(a.id, 'addons')} title="Delete"><Trash2 size={15} /></button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              {renderPagination(filteredAddons, currentPage, setCurrentPage, 'add-ons')}
             </div>
           );
         }
@@ -566,25 +626,28 @@ export default function Services({ defaultTab = 'list' }) {
           }
 
           return (
-            <div className={styles.categoriesGrid}>
-              {filteredCategories.map(c => {
-                const serviceCount = services.filter(s => s.category === c.name).length;
-                return (
-                  <div key={c.id} className={styles.categoryCard}>
-                    <div className={styles.categoryIconBox}>
-                      <Layout size={20} />
+            <div>
+              <div className={styles.categoriesGrid}>
+                {paginatedCategories.map(c => {
+                  const serviceCount = services.filter(s => s.category === c.name).length;
+                  return (
+                    <div key={c.id} className={styles.categoryCard}>
+                      <div className={styles.categoryIconBox}>
+                        <Layout size={20} />
+                      </div>
+                      <div className={styles.categoryInfo}>
+                        <h4 className={styles.categoryName}>{c.name}</h4>
+                        <span className={styles.categoryCount}>{serviceCount} Service{serviceCount !== 1 ? 's' : ''}</span>
+                      </div>
+                      <div className={styles.categoryActions}>
+                        <button className={styles.iconActionBtn} onClick={() => handleEdit(c, 'category')} title="Edit"><Edit2 size={15} /></button>
+                        <button className={`${styles.iconActionBtn} ${styles.delete}`} onClick={() => handleDelete(c.id, 'service_categories')} title="Delete"><Trash2 size={15} /></button>
+                      </div>
                     </div>
-                    <div className={styles.categoryInfo}>
-                      <h4 className={styles.categoryName}>{c.name}</h4>
-                      <span className={styles.categoryCount}>{serviceCount} Service{serviceCount !== 1 ? 's' : ''}</span>
-                    </div>
-                    <div className={styles.categoryActions}>
-                      <button className={styles.iconActionBtn} onClick={() => handleEdit(c, 'category')} title="Edit"><Edit2 size={15} /></button>
-                      <button className={`${styles.iconActionBtn} ${styles.delete}`} onClick={() => handleDelete(c.id, 'service_categories')} title="Delete"><Trash2 size={15} /></button>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+              {renderPagination(filteredCategories, currentPage, setCurrentPage, 'categories')}
             </div>
           );
         }

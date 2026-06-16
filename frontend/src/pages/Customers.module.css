@@ -184,7 +184,8 @@
 }
 
 .pageBtn {
-  width: 32px;
+  min-width: 32px;
+  padding: 0 0.6rem;
   height: 32px;
   border-radius: 6px;
   border: 1px solid #E2E8F0;
@@ -196,6 +197,13 @@
   font-weight: 600;
   color: #64748B;
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pageBtn:hover:not(:disabled) {
+  background: #F1F5F9;
+  color: #1E293B;
+  border-color: #CBD5E1;
 }
 
 .pageBtn.active {

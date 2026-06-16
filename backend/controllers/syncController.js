@@ -3,9 +3,10 @@ const Customer = require('../models/Customer');
 const Service = require('../models/Service');
 const Category = require('../models/Category');
 const Payment = require('../models/Payment');
+const AccountTransaction = require('../models/AccountTransaction');
 
 exports.syncData = async (req, res) => {
-  const { shopId, orders, customers, payments, lastSyncTimestamp } = req.body;
+  const { shopId, orders, customers, payments, accountTransactions, lastSyncTimestamp } = req.body;
   
   try {
     // 1. Process Orders from client
@@ -61,6 +62,18 @@ exports.syncData = async (req, res) => {
       }
     }
 
+    // 3.5 Process AccountTransactions from client
+    if (accountTransactions && accountTransactions.length > 0) {
+      for (const txn of accountTransactions) {
+        const { isSynced, ...rest } = txn;
+        await AccountTransaction.findOneAndUpdate(
+          { id: txn.id, shopId },
+          { ...rest, shopId, updatedAt: new Date() },
+          { upsert: true, new: true }
+        );
+      }
+    }
+
     // 4. Process Categories from client
     if (req.body.categories && req.body.categories.length > 0) {
       for (const cat of req.body.categories) {
@@ -84,6 +97,7 @@ exports.syncData = async (req, res) => {
     const newServices = await Service.find(query);
     const newCategories = await Category.find(query);
     const newPayments = await Payment.find(query);
+    const newAccountTransactions = await AccountTransaction.find(query);
 
     res.json({
       success: true,
@@ -93,7 +107,8 @@ exports.syncData = async (req, res) => {
         customers: newCustomers,
         services: newServices,
         categories: newCategories,
-        payments: newPayments
+        payments: newPayments,
+        accountTransactions: newAccountTransactions
       }
     });
   } catch (error) {
